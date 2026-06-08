@@ -185,6 +185,18 @@ docker compose -f compose.yml exec dnlab-lab-cleanup \
   dnlab-lab-cleanup sync --execute --json
 ```
 
+## VD Disk Persistence
+
+Persistent virtual-device overlays are stored below the configured persistence
+root, normally `/var/lib/docker/dnlab-backups`. The default backend is
+`local-sticky`: dNLab records placement history and prefers to keep persistent
+VDs on the same worker, migrating overlays only while the lab is offline.
+
+The `cephfs` backend is experimental and not production-tested. It performs
+preflight checks for a shared CephFS mount and marker file, but operators must
+validate mount behavior, performance, failure handling and recovery before
+using it for important labs.
+
 ## Production Hardening Override
 
 Use `compose.hardened.yml` after the base and TLS files when validating a

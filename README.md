@@ -104,8 +104,18 @@ The default public URL is `http://localhost:8088`.
 In this distribution stack the GUI, multinode and lab-cleanup services default
 to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_IMAGE_TAG`.
 
-See `OPERATIONS.md` for the production-oriented runbook covering fresh install,
-TLS mode, production hardening, upgrade, backups and smoke checks.
+## Documentation
+
+- [USER_GUIDE.md](USER_GUIDE.md): browser workflows for lab users.
+- [ADMIN_GUIDE.md](ADMIN_GUIDE.md): platform administration guide.
+- [OPERATIONS.md](OPERATIONS.md): production-oriented runbook covering fresh
+  install, TLS mode, production hardening, upgrade, backups and smoke checks.
+- [CONTRIBUTING.md](CONTRIBUTING.md): contribution process and DCO
+  requirements.
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): third-party notices and
+  redistribution notes.
+- [DCO](DCO): Developer Certificate of Origin text.
+- [LICENSE](LICENSE): AGPL-3.0-or-later license text.
 
 ## Docker Auth Database
 
@@ -267,6 +277,12 @@ image builds require it.
 - **Automatic, transparent orchestration** — placement, scheduling, and link management are handled for you; no manual host assignment required.
 - **Lab sharing and interconnection** — share labs with other users and connect labs together.
 - **RBAC-based collaboration** — built-in roles and permissions simplify teamwork on shared labs.
+- **Persistent VD disks** — supported virtual devices can keep disk state under
+  the configured persistence root and reuse it across redeploys.
+
+CephFS-backed persistence is an experimental option and has not been validated
+for production use. Treat it as a lab feature until it is explicitly tested in
+your environment.
 
 ## Architecture
 
