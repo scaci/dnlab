@@ -1,0 +1,206 @@
+services:
+  dnlab-proxy:
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-proxy:${DNLAB_IMAGE_TAG:-latest}
+    depends_on:
+      dnlab-gui:
+        condition: service_healthy
+    ports:
+      - "${DNLAB_PROXY_HTTP_PORT:-8088}:80"
+    networks:
+      - dnlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/ >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  dnlab-gui:
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_IMAGE_TAG:-latest}
+    command: ["sh", "-c", "alembic upgrade head && python run.py"]
+    depends_on:
+      dnlab-auth-db:
+        condition: service_healthy
+      dnlab-multinode:
+        condition: service_healthy
+      dnlab-image-build:
+        condition: service_healthy
+    environment:
+      DNLABGUI_HOST: 0.0.0.0
+      DNLABGUI_PORT: "8080"
+      DNLAB_MULTINODE_API_URL: http://dnlab-multinode:8081
+      DNLAB_IMAGE_BUILD_API_URL: http://dnlab-image-build:8082
+      DNLAB_MULTINODE_HOSTS: /etc/dnlab/hosts.yml
+      TOPOLOGIES_DIR: ${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}
+      DNLABGUI_ALLOWED_ORIGINS: ${DNLABGUI_ALLOWED_ORIGINS:-http://localhost:${DNLAB_PROXY_HTTP_PORT:-8088}}
+      DNLABGUI_AUTH_DATABASE_URL: ${DNLABGUI_AUTH_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-dnlab_gui}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@dnlab-auth-db:5432/${POSTGRES_DB:-dnlab_auth}}
+    volumes:
+      - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
+      - ${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}:${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}
+      - ${DNLAB_PERSIST_ROOT:-/var/lib/docker/dnlab-backups}:${DNLAB_PERSIST_ROOT:-/var/lib/docker/dnlab-backups}
+      - ${DNLAB_LOG_DIR_GUI:-/var/log/dnlab-gui}:${DNLAB_LOG_DIR_GUI:-/var/log/dnlab-gui}
+      - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
+    # Reach the per-lab jumphosts' SSH ports published on the master host
+    # (Web UI tunnels + console/log). The GUI shares no docker network
+    # with those jumphosts, so it connects via host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - dnlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/', timeout=3).read()\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  dnlab-auth-seed:
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_IMAGE_TAG:-latest}
+    profiles:
+      - seed-admin
+    depends_on:
+      dnlab-auth-db:
+        condition: service_healthy
+    environment:
+      DNLABGUI_AUTH_DATABASE_URL: ${DNLABGUI_AUTH_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-dnlab_gui}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@dnlab-auth-db:5432/${POSTGRES_DB:-dnlab_auth}}
+      DNLABGUI_BOOTSTRAP_ADMIN_USERNAME: ${DNLABGUI_BOOTSTRAP_ADMIN_USERNAME:-}
+      DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD: ${DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD:-}
+    volumes:
+      - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
+      - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
+    command:
+      - sh
+      - -c
+      - |
+        alembic upgrade head
+        if [ -z "$$DNLABGUI_BOOTSTRAP_ADMIN_USERNAME" ] || [ -z "$$DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD" ]; then
+          echo "set DNLABGUI_BOOTSTRAP_ADMIN_USERNAME and DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD"
+          exit 2
+        fi
+        python scripts/seed_admin.py \
+          --username "$$DNLABGUI_BOOTSTRAP_ADMIN_USERNAME" \
+          --password "$$DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD"
+    networks:
+      - dnlab-internal
+    restart: "no"
+
+  dnlab-auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dnlab_auth}
+      POSTGRES_USER: ${POSTGRES_USER:-dnlab_gui}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - dnlab-auth-pgdata:/var/lib/postgresql/data
+    networks:
+      - dnlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-dnlab_gui} -d $${POSTGRES_DB:-dnlab_auth}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  dnlab-multinode:
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_IMAGE_TAG:-latest}
+    privileged: true
+    environment:
+      DNLAB_MULTINODE_API_HOST: 0.0.0.0
+      DNLAB_MULTINODE_API_PORT: "8081"
+      DNLAB_IMAGE_SYNC_API_URL: http://dnlab-image-sync:8083
+    volumes:
+      - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
+      - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}:${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}
+      - ${DNLAB_PERSIST_ROOT:-/var/lib/docker/dnlab-backups}:${DNLAB_PERSIST_ROOT:-/var/lib/docker/dnlab-backups}
+      - ${DNLAB_LOG_DIR_MULTINODE:-/var/log/dnlab-multinode}:${DNLAB_LOG_DIR_MULTINODE:-/var/log/dnlab-multinode}
+      - ${DNLAB_TMP_DIR:-/tmp}:${DNLAB_TMP_DIR:-/tmp}
+      - ${DNLAB_CONTAINERLAB_BIN:-/usr/bin/containerlab}:/usr/bin/containerlab:ro
+    networks:
+      - dnlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3).read()\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  dnlab-image-sync:
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_IMAGE_TAG:-latest}
+    command: ["dnlab-image-sync", "start"]
+    depends_on:
+      - dnlab-multinode
+    environment:
+      DNLAB_MULTINODE_HOSTS: /etc/dnlab/hosts.yml
+      DNLAB_IMAGE_SYNC_API_HOST: 0.0.0.0
+      DNLAB_IMAGE_SYNC_API_PORT: "8083"
+    volumes:
+      - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
+      - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dnlab-image-sync-state:/var/lib/dnlab-image-sync
+    networks:
+      - dnlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3).read()\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  dnlab-lab-cleanup:
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-lab-cleanup:${DNLAB_IMAGE_TAG:-latest}
+    depends_on:
+      - dnlab-multinode
+    volumes:
+      - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
+      - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}:${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}
+      - ${DNLAB_PERSIST_ROOT:-/var/lib/docker/dnlab-backups}:${DNLAB_PERSIST_ROOT:-/var/lib/docker/dnlab-backups}
+      - ${DNLAB_LOG_DIR_MULTINODE:-/var/log/dnlab-multinode}:${DNLAB_LOG_DIR_MULTINODE:-/var/log/dnlab-multinode}
+      - ${DNLAB_LAB_CLEANUP_STATE_DIR:-/var/lib/dnlab-lab-cleanup}:/var/lib/dnlab-lab-cleanup
+      - ${DNLAB_TMP_DIR:-/tmp}:${DNLAB_TMP_DIR:-/tmp}
+      - ${DNLAB_CONTAINERLAB_BIN:-/usr/bin/containerlab}:/usr/bin/containerlab:ro
+    networks:
+      - dnlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "dnlab-lab-cleanup status --json >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  dnlab-image-build:
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-image-build:${DNLAB_IMAGE_TAG:-latest}
+    environment:
+      DNLAB_IMAGE_BUILD_API_HOST: 0.0.0.0
+      DNLAB_IMAGE_BUILD_API_PORT: "8082"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DNLAB_IMAGE_BUILD_WORKSPACE:-/var/lib/dnlab-image-build}:/var/lib/dnlab-image-build
+      - ${DNLAB_VRNETLAB_DIR:-/opt/vrnetlab}:/opt/vrnetlab
+    networks:
+      - dnlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3).read()\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+networks:
+  dnlab-internal:
+
+volumes:
+  dnlab-auth-pgdata:
+  dnlab-image-sync-state:

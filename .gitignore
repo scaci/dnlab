@@ -1,0 +1,12 @@
+.env
+auth-db-dumps/
+*.sql
+*.dump
+*.log
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+letsencrypt/
