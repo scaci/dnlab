@@ -1,6 +1,6 @@
 services:
   dnlab-proxy:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-proxy:${DNLAB_IMAGE_TAG:-latest}
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-proxy:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     depends_on:
       dnlab-gui:
         condition: service_healthy
@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   dnlab-gui:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_IMAGE_TAG:-latest}
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     command: ["sh", "-c", "alembic upgrade head && python run.py"]
     depends_on:
       dnlab-auth-db:
@@ -31,6 +31,8 @@ services:
       DNLABGUI_PORT: "8080"
       DNLAB_MULTINODE_API_URL: http://dnlab-multinode:8081
       DNLAB_IMAGE_BUILD_API_URL: http://dnlab-image-build:8082
+      DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}
       DNLAB_MULTINODE_HOSTS: /etc/dnlab/hosts.yml
       TOPOLOGIES_DIR: ${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}
       DNLABGUI_ALLOWED_ORIGINS: ${DNLABGUI_ALLOWED_ORIGINS:-http://localhost:${DNLAB_PROXY_HTTP_PORT:-8088}}
@@ -57,7 +59,7 @@ services:
     restart: unless-stopped
 
   dnlab-auth-seed:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_IMAGE_TAG:-latest}
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - seed-admin
     depends_on:
@@ -106,12 +108,14 @@ services:
     restart: unless-stopped
 
   dnlab-multinode:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_IMAGE_TAG:-latest}
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     privileged: true
     environment:
       DNLAB_MULTINODE_API_HOST: 0.0.0.0
       DNLAB_MULTINODE_API_PORT: "8081"
       DNLAB_IMAGE_SYNC_API_URL: http://dnlab-image-sync:8083
+      DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}
     volumes:
       - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
       - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
@@ -132,7 +136,7 @@ services:
     restart: unless-stopped
 
   dnlab-image-sync:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_IMAGE_TAG:-latest}
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     command: ["dnlab-image-sync", "start"]
     depends_on:
       - dnlab-multinode
@@ -140,6 +144,8 @@ services:
       DNLAB_MULTINODE_HOSTS: /etc/dnlab/hosts.yml
       DNLAB_IMAGE_SYNC_API_HOST: 0.0.0.0
       DNLAB_IMAGE_SYNC_API_PORT: "8083"
+      DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}
     volumes:
       - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
       - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
@@ -156,7 +162,7 @@ services:
     restart: unless-stopped
 
   dnlab-lab-cleanup:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-lab-cleanup:${DNLAB_IMAGE_TAG:-latest}
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-lab-cleanup:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     depends_on:
       - dnlab-multinode
     volumes:
@@ -180,7 +186,7 @@ services:
     restart: unless-stopped
 
   dnlab-image-build:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-image-build:${DNLAB_IMAGE_TAG:-latest}
+    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-image-build:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     environment:
       DNLAB_IMAGE_BUILD_API_HOST: 0.0.0.0
       DNLAB_IMAGE_BUILD_API_PORT: "8082"

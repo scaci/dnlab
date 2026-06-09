@@ -54,6 +54,17 @@ one seed command, then remove them from the shell history if needed.
 
 1. Prepare host-side config and directories:
 
+For a single-node install, `/etc/dnlab/hosts.yml` should use `localhost` as the
+master and no remote workers:
+
+```yaml
+infrastructure:
+  master:
+    host: localhost
+    ssh_user: root
+  workers: {}
+```
+
 ```bash
 test -f /etc/dnlab/paths.yml
 test -f /etc/dnlab/hosts.yml

@@ -44,6 +44,19 @@ Required files:
 - `/etc/dnlab/hosts.yml`: master and worker host inventory.
 - `/etc/dnlab/paths.yml`: shared paths used by GUI and backend services.
 
+The `master` entry identifies the host that runs the Compose stack and
+orchestration services. Worker entries identify hosts that can run lab devices.
+For a single-node installation, the same host acts as both master and worker;
+use `localhost` as the master and omit remote workers:
+
+```yaml
+infrastructure:
+  master:
+    host: localhost
+    ssh_user: root
+  workers: {}
+```
+
 Common host directories:
 
 ```bash
@@ -80,7 +93,8 @@ single seed command.
 ## First Install
 
 1. Prepare `/etc/dnlab/hosts.yml`, `/etc/dnlab/paths.yml` and the host
-   directories.
+   directories. For a single-node install, set `master.host` to `localhost`
+   and leave `workers` empty.
 2. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD`.
 3. Build and start the proxy dependency chain:
 
@@ -206,6 +220,18 @@ egress; BGP mode integrates with administrator-managed route reflector
 configuration.
 
 ![RealNet BGP admin](docs/images/admin-realnet-bgp.png)
+
+These global settings also back the user-facing RealNet BGP lab-to-lab
+communication feature. Users can select allowed peer labs from the RealNet node
+properties, subject to RBAC, but the route-reflector parameters are configured
+centrally here by administrators.
+
+Configure the route-reflector AS and address (`RR AS`, `RR IP`), the host-side
+network used for RealNet infrastructure (`Host network`), the pools assigned to
+lab routers (`Router AS pool`, `Router IP pool`), the RealNet node network pool,
+the route-reflector image and the shared `RR BGP password`. Keep these ranges
+large enough for the expected number of RealNet-connected labs and avoid
+overlap with lab, management and physical network prefixes.
 
 Use the Admin page to update global RealNet BGP settings, regenerate the route
 reflector password when needed and reconcile the route reflector service.

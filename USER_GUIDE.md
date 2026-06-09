@@ -164,6 +164,50 @@ configuration. Device-side routing policy remains explicit: configure
 neighbors, passwords and policies inside the virtual devices as required by the
 scenario.
 
+Use a RealNet object when the topology must exchange traffic with something
+outside the lab. The object represents the lab-side attachment point to the
+physical network; dNLab places and wires the runtime components across the
+configured dNLab host or hosts as part of the normal lab deployment.
+
+RealNet has two operating modes:
+
+- **NAT mode** provides simple outbound connectivity from the lab toward the
+  external network. Use it when devices only need egress access and the
+  external network does not need to learn lab prefixes.
+- **BGP mode** lets lab devices exchange routes with the administrator-managed
+  RealNet route reflector. Use it when the scenario needs routed integration
+  with the physical network or with other RealNet-connected labs.
+
+The following diagram shows the BGP mode topology. It does not describe NAT
+mode.
+
+![RealNet BGP topology](docs/images/realnet_topology.svg)
+
+In BGP mode, RealNet can also connect different labs to each other, including
+labs owned by different users. Select the RealNet node and use its properties to
+choose which labs this lab is allowed to communicate with.
+
+![RealNet properties](docs/images/user-realnet-properties.png)
+
+Communication must be enabled from both sides: each lab must allow the other lab
+from the RealNet node properties before routes are exchanged between them. dNLab
+applies RBAC to the BGP features of RealNet nodes, so the labs and actions you
+can select depend on your account role and permissions.
+
+The BGP platform parameters are global and are configured by an administrator.
+For administrative setup, route-reflector status and global RealNet BGP
+settings, see [ADMIN_GUIDE.md](ADMIN_GUIDE.md).
+
+In BGP mode, the route reflector is shared platform infrastructure. dNLab
+maintains the RealNet object, runtime wiring and route-reflector integration,
+but it does not hide routing design from the lab. Configure the BGP neighbor,
+authentication, advertised prefixes and import/export policy inside each
+virtual device according to the exercise.
+
+If RealNet BGP is unavailable, or if the route reflector status is unhealthy,
+ask an administrator to check the global RealNet BGP settings and reconcile the
+route reflector service.
+
 ## Roles And Access
 
 dNLab uses role-based access control:

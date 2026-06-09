@@ -1,19 +1,19 @@
 # dNLab
 
 <p align="center">
-  <img src="03-lockup-orizzontale-light.svg" alt="dNLab logo" width="360">
+  <img src="docs/images/lockup-orizzontale-light.svg" alt="dNLab logo" width="360">
 </p>
 
-> Build network labs that span multiple nodes, orchestrated automatically and transparently.
+> Build network labs on one node or across many, orchestrated automatically and transparently.
 
 ![Build](https://img.shields.io/badge/build-TODO-lightgrey)
 ![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)
 
 ## Overview
 
-**dNLab** (distributed Network Labs) is an application built around a [Containerlab](https://containerlab.dev) core. It lets you build network labs that are automatically distributed across multiple nodes, so a single topology can grow well beyond the capacity of one machine.
+**dNLab** (distributed Network Labs) is an application built around a [Containerlab](https://containerlab.dev) core. It lets you build network labs on a single node or automatically distribute them across multiple nodes, so a topology can start small and grow beyond the capacity of one machine.
 
-Orchestration is fully automatic and transparent. You design the topology; dNLab handles distributing and managing it across the underlying multi-node infrastructure — including device placement and scheduling, intra-host links, and cross-host dataplane connectivity. The distribution layer stays out of your way: you reason about the network you want, not the hosts it runs on.
+Orchestration is fully automatic and transparent. You design the topology; dNLab handles placing and managing it across the configured infrastructure — including single-host placement, device scheduling, intra-host links and cross-host dataplane connectivity when multiple workers are present. The distribution layer stays out of your way: you reason about the network you want, not the hosts it runs on.
 
 dNLab is built for learning and experimenting with networking. Labs can be shared and interconnected, and a dedicated Role-Based Access Control (RBAC) system defines roles and permissions to make collaboration between users straightforward.
 
@@ -24,7 +24,8 @@ Recommended baseline:
 - Debian 13 "trixie" official stable, minimal server install, `amd64`.
 - Bare metal host with direct access to physical CPU, memory, storage and
   networking resources.
-- One or more bare metal nodes are the reference architecture.
+- One or more bare metal nodes are the reference architecture. A single host is
+  a valid deployment model; in that case it acts as both master and worker.
 - As an alternative, one or more Proxmox LXC containers may be used when they
   are configured to expose the required host resources and privileges.
 - Virtual machines are not a supported reference architecture for dNLab. dNLab
@@ -84,6 +85,10 @@ sudo mkdir -p /etc/dnlab /root/dnlab-topologies \
 Create `/etc/dnlab/hosts.yml` and `/etc/dnlab/paths.yml` for your site before
 deploying real labs. The GUI and the internal services mount `/etc/dnlab`
 read-only.
+
+For a single-node install, configure `hosts.yml` with `master.host: localhost`
+and no remote workers. Multi-node sites can add workers later without changing
+the Compose entrypoint.
 
 Start the stack:
 
@@ -273,7 +278,8 @@ image builds require it.
 ## Key Features
 
 - **Containerlab-based core** — leverages Containerlab for defining and running virtual network topologies.
-- **Multi-node distribution** — a single lab can be spread automatically across multiple worker nodes.
+- **Single-node or multi-node operation** — a lab can run on one host or be
+  spread automatically across multiple worker nodes.
 - **Automatic, transparent orchestration** — placement, scheduling, and link management are handled for you; no manual host assignment required.
 - **Lab sharing and interconnection** — share labs with other users and connect labs together.
 - **RBAC-based collaboration** — built-in roles and permissions simplify teamwork on shared labs.
@@ -286,7 +292,10 @@ your environment.
 
 ## Architecture
 
-A user submits a topology to the dNLab orchestrator. The orchestrator schedules devices across the available worker nodes, wiring same-host links locally and stitching cross-host links over the dataplane, then manages the lab's lifecycle across the cluster.
+A user submits a topology to the dNLab orchestrator. The orchestrator schedules
+devices on the configured worker capacity, wiring same-host links locally and,
+when multiple workers are present, stitching cross-host links over the
+dataplane. The following diagram shows a multi-node deployment.
 
 ```mermaid
 flowchart TD
@@ -311,7 +320,8 @@ flowchart TD
 
 - A Containerlab-compatible environment on each node. <!-- [TODO: confirm minimum Containerlab version] -->
 - Container runtime and the virtual network device images you intend to use.
-- One or more Linux hosts to act as worker nodes. <!-- [TODO: confirm OS/kernel requirements] -->
+- One or more Linux hosts to run lab devices. In a single-node deployment, the
+  master host is also the worker. <!-- [TODO: confirm OS/kernel requirements] -->
 
 ### Installation
 
@@ -331,7 +341,7 @@ dnlab deploy [TODO: path/to/topology]
 
 ## Usage
 
-Define a distributed lab and deploy it across your nodes:
+Define a lab and deploy it on the configured dNLab host or hosts:
 
 ```bash
 # [TODO: replace with the real topology format and deploy syntax]
