@@ -33,6 +33,7 @@ In the Docker target:
 Create a local `.env` from `.env.example` and set at least:
 
 ```text
+DNLAB_VERSION=0.1.0
 POSTGRES_PASSWORD=<long random value>
 ```
 
@@ -86,12 +87,13 @@ lab_cleanup:
 
 ```bash
 cp .env.example .env
+grep '^DNLAB_VERSION=0.1.0$' .env
 ```
 
-3. Build and start through the proxy:
+3. Pull and start the published release images through the proxy:
 
 ```bash
-docker compose -f compose.yml build
+docker compose -f compose.yml pull
 docker compose -f compose.yml up -d dnlab-proxy
 ./smoke.sh
 ```
@@ -157,10 +159,11 @@ docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
   > auth-db-dumps/dnlab_auth_before_upgrade.sql
 ```
 
-2. Build updated images:
+2. Pull the release images selected by `.env`:
 
 ```bash
-docker compose -f compose.yml build
+grep '^DNLAB_VERSION=0.1.0$' .env
+docker compose -f compose.yml pull
 ```
 
 3. Recreate via proxy dependency chain:

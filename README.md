@@ -62,6 +62,9 @@ This repository contains the Docker distribution stack for dNLab. It uses GHCR
 image references and documents source availability for published images in
 [SOURCE.md](SOURCE.md).
 
+Current release: `0.1.0`. The Compose stack requires `DNLAB_VERSION=0.1.0`
+in `.env`; this selects the published GHCR images for the release.
+
 The stack contains:
 
 - `dnlab-proxy`: Apache reverse proxy, exposed on the host.
@@ -97,6 +100,17 @@ cp .env.example .env
 # Edit .env and set a non-default POSTGRES_PASSWORD.
 docker compose -f compose.yml up -d dnlab-proxy
 ```
+
+The release image settings copied from `.env.example` are:
+
+```env
+DNLAB_VERSION=0.1.0
+DNLAB_IMAGE_PREFIX=ghcr.io/scaci/
+DNLAB_RUNTIME_IMAGE_PREFIX=ghcr.io/scaci/dnlab-
+```
+
+With those values, `docker compose up` pulls and runs the published
+`ghcr.io/scaci/dnlab-*:0.1.0` release images.
 
 Run the initial smoke check:
 

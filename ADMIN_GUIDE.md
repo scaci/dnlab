@@ -75,7 +75,10 @@ starting the stack.
 
 Important settings:
 
-- `DNLAB_IMAGE_PREFIX` and `DNLAB_IMAGE_TAG`: image source and tag.
+- `DNLAB_VERSION`: image tag. For this release, use `DNLAB_VERSION=0.1.0`.
+- `DNLAB_IMAGE_PREFIX`: image registry prefix, normally `ghcr.io/scaci/`.
+- `DNLAB_RUNTIME_IMAGE_PREFIX`: runtime image prefix, normally
+  `ghcr.io/scaci/dnlab-`.
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: auth DB settings.
 - `DNLAB_PROXY_HTTP_PORT`: public HTTP port for non-TLS mode.
 - `DNLAB_PROXY_SERVER_NAME`: public GUI hostname in TLS mode.
@@ -96,10 +99,9 @@ single seed command.
    directories. For a single-node install, set `master.host` to `localhost`
    and leave `workers` empty.
 2. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD`.
-3. Build and start the proxy dependency chain:
+3. Start the proxy dependency chain from the published GHCR release images:
 
 ```bash
-docker compose -f compose.yml build
 docker compose -f compose.yml up -d dnlab-proxy
 ```
 
