@@ -10,5 +10,9 @@ auth-db-dumps/
 *.p12
 *.pfx
 letsencrypt/
+__pycache__/
+*.pyc
 /scripts/release_ghcr.py
 /scripts/release_ghcr.md
+/scripts/release_sources.py
+/scripts/release_sources.md

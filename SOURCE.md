@@ -18,7 +18,37 @@ The corresponding source archive must include the application source,
 Dockerfiles, build scripts, release metadata and configuration needed to build,
 install, run and modify the distributed image.
 
-The exact source archive generation and publication workflow is maintained as a
-release engineering process. This document records the public source
-availability policy; it does not require private operational repositories to be
-made public.
+## Release assets
+
+Source archives are published as assets on the matching `scaci/dnlab` GitHub
+Release. They are not committed as binary files in this repository.
+
+For a release `vX.Y.Z`, the expected source asset names are:
+
+- `dnlab-gui-X.Y.Z-source.tar.gz`
+- `dnlab-proxy-X.Y.Z-source.tar.gz`
+- `dnlab-multinode-X.Y.Z-source.tar.gz`
+- `dnlab-lab-cleanup-X.Y.Z-source.tar.gz`
+- `dnlab-jumphost-X.Y.Z-source.tar.gz`
+- `dnlab-dns-X.Y.Z-source.tar.gz`
+- `dnlab-runtime-relay-X.Y.Z-source.tar.gz`
+- `dnlab-realnet-router-X.Y.Z-source.tar.gz`
+- `dnlab-realnet-rr-X.Y.Z-source.tar.gz`
+- `dnlab-mgmt-anchor-X.Y.Z-source.tar.gz`
+- `dnlab-image-build-X.Y.Z-source.tar.gz`
+- `SHA256SUMS`
+
+Each source archive includes a `SOURCE-MANIFEST.json` file that identifies the
+image, version, source repository, release tag, commit SHA, Dockerfile and build
+context used for the corresponding image.
+
+After downloading the assets for a release, verify them with:
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+The source archive generation and publication workflow is maintained as a
+release engineering process in the private operational documentation. This
+document records the public source availability policy; it does not require
+private operational repositories to be made public.
