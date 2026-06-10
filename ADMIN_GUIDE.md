@@ -65,6 +65,18 @@ sudo mkdir -p /etc/dnlab /root/dnlab-topologies \
   /var/log/dnlab-multinode /var/lib/dnlab-image-build /opt/vrnetlab
 ```
 
+`/opt/vrnetlab` must contain the dNLab vrnetlab tree used by
+`dnlab-image-build`. For a fresh host:
+
+```bash
+if [ ! -d /opt/vrnetlab/.git ]; then
+  sudo git clone --branch dnlab https://github.com/scaci/vrnetlab.git /opt/vrnetlab
+else
+  git -C /opt/vrnetlab remote -v
+  git -C /opt/vrnetlab branch --show-current
+fi
+```
+
 The Compose stack mounts `/etc/dnlab` read-only into the GUI and internal
 services.
 
@@ -258,6 +270,8 @@ Device-side BGP configuration remains explicit inside each virtual device.
 `dnlab-image-build` provides an internal API for upload, build jobs and job log
 streaming. Build metadata and logs are stored under
 `${DNLAB_IMAGE_BUILD_WORKSPACE:-/var/lib/dnlab-image-build}`.
+Build contexts are read from `${DNLAB_VRNETLAB_DIR:-/opt/vrnetlab}`, which
+must be the `dnlab` branch of `https://github.com/scaci/vrnetlab.git`.
 
 ![Image build admin](docs/images/admin-image-build.png)
 

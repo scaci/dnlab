@@ -85,6 +85,17 @@ sudo mkdir -p /etc/dnlab /root/dnlab-topologies \
   /var/log/dnlab-multinode /var/lib/dnlab-image-build /opt/vrnetlab
 ```
 
+Install the dNLab vrnetlab image-build tree if it is not already present:
+
+```bash
+if [ ! -d /opt/vrnetlab/.git ]; then
+  sudo git clone --branch dnlab https://github.com/scaci/vrnetlab.git /opt/vrnetlab
+else
+  git -C /opt/vrnetlab remote -v
+  git -C /opt/vrnetlab branch --show-current
+fi
+```
+
 Create `/etc/dnlab/hosts.yml` and `/etc/dnlab/paths.yml` for your site before
 deploying real labs. The GUI and the internal services mount `/etc/dnlab`
 read-only.
@@ -388,6 +399,8 @@ flowchart TD
 
 - A Containerlab-compatible environment on each node. <!-- [TODO: confirm minimum Containerlab version] -->
 - Container runtime and the virtual network device images you intend to use.
+- The dNLab vrnetlab image-build tree cloned at `/opt/vrnetlab` from
+  `https://github.com/scaci/vrnetlab.git`, branch `dnlab`.
 - One or more Linux hosts to run lab devices. In a single-node deployment, the
   master host is also the worker. <!-- [TODO: confirm OS/kernel requirements] -->
 

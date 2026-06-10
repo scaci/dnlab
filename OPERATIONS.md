@@ -75,7 +75,13 @@ infrastructure:
 ```bash
 test -f /etc/dnlab/paths.yml
 test -f /etc/dnlab/hosts.yml
-mkdir -p /root/dnlab-topologies /var/lib/docker/dnlab-backups /var/log/dnlab-gui /var/log/dnlab-multinode /var/lib/dnlab-lab-cleanup
+mkdir -p /root/dnlab-topologies /var/lib/docker/dnlab-backups /var/log/dnlab-gui /var/log/dnlab-multinode /var/lib/dnlab-image-build /var/lib/dnlab-lab-cleanup /opt/vrnetlab
+if [ ! -d /opt/vrnetlab/.git ]; then
+  git clone --branch dnlab https://github.com/scaci/vrnetlab.git /opt/vrnetlab
+else
+  git -C /opt/vrnetlab remote -v
+  git -C /opt/vrnetlab branch --show-current
+fi
 ```
 
 For first rollout, keep the cleanup reconciler in report-only mode until the
