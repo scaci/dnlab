@@ -19,6 +19,9 @@ compose() {
 }
 
 curl_args=(-sS)
+if [ "${DNLAB_SMOKE_CURL_INSECURE:-0}" = "1" ] || [ "${DNLAB_SMOKE_CURL_INSECURE:-}" = "true" ]; then
+  curl_args+=(-k)
+fi
 if [ -n "${DNLAB_SMOKE_CURL_RESOLVE:-}" ]; then
   curl_args+=(--resolve "$DNLAB_SMOKE_CURL_RESOLVE")
 fi

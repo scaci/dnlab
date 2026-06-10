@@ -98,15 +98,29 @@ single seed command.
 1. Prepare `/etc/dnlab/hosts.yml`, `/etc/dnlab/paths.yml` and the host
    directories. For a single-node install, set `master.host` to `localhost`
    and leave `workers` empty.
-2. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD`.
-3. Start the proxy dependency chain from the published GHCR release images:
+2. Install a TLS certificate for the proxy. For a local test, a self-signed
+   certificate under `/etc/ssl/dnlab` is acceptable; production should use a
+   publicly trusted certificate.
+3. Copy `.env.example` to `.env`; set `POSTGRES_PASSWORD`,
+   `DNLAB_PROXY_SERVER_NAME`, `DNLAB_PROXY_WEBUI_SUFFIX`,
+   `DNLAB_PROXY_HTTPS_PORT`, `DNLAB_PROXY_TLS_DIR`,
+   `DNLABGUI_ALLOWED_ORIGINS` and `DNLABGUI_WEBUI_HOST_SUFFIX`.
+4. Start the proxy dependency chain from the published GHCR release images:
 
 ```bash
-docker compose -f compose.yml up -d dnlab-proxy
+docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
 ```
 
-4. Run `./smoke.sh`.
-5. Seed the first administrator:
+5. Run `./smoke.sh` against the HTTPS URL. For a self-signed local test:
+
+```bash
+COMPOSE_FILES=compose.yml:compose.tls.yml \
+DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
+DNLAB_SMOKE_CURL_INSECURE=1 \
+./smoke.sh
+```
+
+6. Seed the first administrator:
 
 ```bash
 DNLABGUI_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -114,7 +128,7 @@ DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD='<one-time-password>' \
 docker compose -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
 ```
 
-6. Run `./smoke.sh` again.
+7. Run the HTTPS smoke check again.
 
 See [OPERATIONS.md](OPERATIONS.md) for the full runbook.
 

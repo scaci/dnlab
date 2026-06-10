@@ -35,17 +35,23 @@ Create a local `.env` from `.env.example` and set at least:
 ```text
 DNLAB_VERSION=0.1.0
 POSTGRES_PASSWORD=<long random value>
+DNLAB_PROXY_SERVER_NAME=<gui-hostname>
+DNLAB_PROXY_WEBUI_SUFFIX=<webui-host-suffix>
+DNLAB_PROXY_HTTPS_PORT=<https-port>
+DNLAB_PROXY_TLS_DIR=<host TLS directory>
+DNLABGUI_ALLOWED_ORIGINS=https://<gui-origin>
+DNLABGUI_WEBUI_HOST_SUFFIX=<webui-host-suffix>
 ```
 
-For production TLS also set:
+For a local self-signed test, `localhost` and port `8443` are acceptable:
 
 ```text
-DNLAB_PROXY_SERVER_NAME=dnlab.example.com
-DNLAB_PROXY_WEBUI_SUFFIX=dnlab.example.com
-DNLAB_PROXY_HTTPS_PORT=443
+DNLAB_PROXY_SERVER_NAME=localhost
+DNLAB_PROXY_WEBUI_SUFFIX=localhost
+DNLAB_PROXY_HTTPS_PORT=8443
 DNLAB_PROXY_TLS_DIR=/etc/ssl/dnlab
-DNLABGUI_ALLOWED_ORIGINS=https://dnlab.example.com
-DNLABGUI_WEBUI_HOST_SUFFIX=dnlab.example.com
+DNLABGUI_ALLOWED_ORIGINS=https://localhost:8443
+DNLABGUI_WEBUI_HOST_SUFFIX=localhost
 ```
 
 Do not store real admin bootstrap passwords in `.env`. Export them only for the
@@ -90,15 +96,29 @@ cp .env.example .env
 grep '^DNLAB_VERSION=0.1.0$' .env
 ```
 
-3. Pull and start the published release images through the proxy:
+3. Install a TLS certificate. For a local self-signed test:
 
 ```bash
-docker compose -f compose.yml pull
-docker compose -f compose.yml up -d dnlab-proxy
+mkdir -p /etc/ssl/dnlab
+openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+  -keyout /etc/ssl/dnlab/dnlab-gui.key \
+  -out /etc/ssl/dnlab/dnlab-gui.crt \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+4. Pull and start the published release images through the TLS proxy:
+
+```bash
+docker compose -f compose.yml -f compose.tls.yml pull
+docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
+COMPOSE_FILES=compose.yml:compose.tls.yml \
+DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
+DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
 
-4. Seed the first admin:
+5. Seed the first admin:
 
 ```bash
 DNLABGUI_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -106,9 +126,12 @@ DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD='<one-time-password>' \
 docker compose -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
 ```
 
-5. Re-run the smoke check:
+6. Re-run the HTTPS smoke check:
 
 ```bash
+COMPOSE_FILES=compose.yml:compose.tls.yml \
+DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
+DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
 
@@ -280,6 +303,9 @@ docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
 docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
   < auth-db-dumps/dnlab_auth_restore.sql
-docker compose -f compose.yml up -d dnlab-proxy
+docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
+COMPOSE_FILES=compose.yml:compose.tls.yml \
+DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
+DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```

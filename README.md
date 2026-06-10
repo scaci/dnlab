@@ -93,12 +93,25 @@ For a single-node install, configure `hosts.yml` with `master.host: localhost`
 and no remote workers. Multi-node sites can add workers later without changing
 the Compose entrypoint.
 
+Create or install a TLS certificate before starting the browser-facing proxy.
+dNLab sets the GUI session cookie as HTTPS-only, so even local test installs
+should use TLS. For a local self-signed test certificate:
+
+```bash
+sudo mkdir -p /etc/ssl/dnlab
+sudo openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+  -keyout /etc/ssl/dnlab/dnlab-gui.key \
+  -out /etc/ssl/dnlab/dnlab-gui.crt \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
 Start the stack:
 
 ```bash
 cp .env.example .env
-# Edit .env and set a non-default POSTGRES_PASSWORD.
-docker compose -f compose.yml up -d dnlab-proxy
+# Edit .env and set POSTGRES_PASSWORD plus the TLS values below.
+docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
 ```
 
 The release image settings copied from `.env.example` are:
@@ -109,16 +122,33 @@ DNLAB_IMAGE_PREFIX=ghcr.io/scaci/
 DNLAB_RUNTIME_IMAGE_PREFIX=ghcr.io/scaci/dnlab-
 ```
 
+For a local self-signed HTTPS test, use:
+
+```env
+DNLAB_PROXY_SERVER_NAME=localhost
+DNLAB_PROXY_WEBUI_SUFFIX=localhost
+DNLAB_PROXY_HTTPS_PORT=8443
+DNLAB_PROXY_TLS_DIR=/etc/ssl/dnlab
+DNLABGUI_ALLOWED_ORIGINS=https://localhost:8443
+DNLABGUI_WEBUI_HOST_SUFFIX=localhost
+```
+
 With those values, `docker compose up` pulls and runs the published
 `ghcr.io/scaci/dnlab-*:0.1.0` release images.
 
 Run the initial smoke check:
 
 ```bash
+COMPOSE_FILES=compose.yml:compose.tls.yml \
+DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
+DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
 
-The default public URL is `http://localhost:8088`.
+The default local test URL with the values above is
+`https://localhost:8443/`. Browsers will warn about a self-signed certificate;
+accept it only for local testing. Production deployments should use a publicly
+trusted certificate and normally expose HTTPS on port 443.
 
 In this distribution stack the GUI, multinode and lab-cleanup services default
 to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_VERSION`.
@@ -178,7 +208,7 @@ docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
 docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
   < auth-db-dumps/dnlab_auth_from_old_container.sql
-docker compose -f compose.yml up -d dnlab-proxy
+docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
 ```
 
 ## Docker Service Boundaries
@@ -206,31 +236,51 @@ is routed through `dnlab-multinode`; image-build operations are routed through
 Fresh-install smoke check:
 
 ```bash
-mkdir -p /tmp/dnlab-fresh-topologies
-POSTGRES_PASSWORD=fresh-check-password \
-DNLAB_PROXY_HTTP_PORT=18088 \
-DNLAB_TOPOLOGIES_DIR=/tmp/dnlab-fresh-topologies \
-docker compose -p dnlabfresh -f compose.yml up -d dnlab-proxy
+mkdir -p /tmp/dnlab-fresh-topologies /tmp/dnlab-fresh-tls
+openssl req -x509 -nodes -newkey rsa:2048 -days 7 \
+  -keyout /tmp/dnlab-fresh-tls/dnlab-gui.key \
+  -out /tmp/dnlab-fresh-tls/dnlab-gui.crt \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
 POSTGRES_PASSWORD=fresh-check-password \
 DNLAB_PROXY_HTTP_PORT=18088 \
+DNLAB_PROXY_HTTPS_PORT=18443 \
+DNLAB_PROXY_SERVER_NAME=localhost \
+DNLAB_PROXY_WEBUI_SUFFIX=localhost \
+DNLAB_PROXY_TLS_DIR=/tmp/dnlab-fresh-tls \
+DNLABGUI_ALLOWED_ORIGINS=https://localhost:18443 \
+DNLABGUI_WEBUI_HOST_SUFFIX=localhost \
+DNLAB_TOPOLOGIES_DIR=/tmp/dnlab-fresh-topologies \
+docker compose -p dnlabfresh -f compose.yml -f compose.tls.yml up -d dnlab-proxy
+
+POSTGRES_PASSWORD=fresh-check-password \
+DNLAB_PROXY_HTTP_PORT=18088 \
+DNLAB_PROXY_HTTPS_PORT=18443 \
+DNLAB_PROXY_SERVER_NAME=localhost \
+DNLAB_PROXY_WEBUI_SUFFIX=localhost \
+DNLAB_PROXY_TLS_DIR=/tmp/dnlab-fresh-tls \
+DNLABGUI_ALLOWED_ORIGINS=https://localhost:18443 \
+DNLABGUI_WEBUI_HOST_SUFFIX=localhost \
 DNLAB_TOPOLOGIES_DIR=/tmp/dnlab-fresh-topologies \
 DNLABGUI_BOOTSTRAP_ADMIN_USERNAME=freshadmin \
 DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD='<freshadmin-password>' \
 docker compose -p dnlabfresh -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
 
-curl -i http://127.0.0.1:18088/api/auth/login \
+curl -ki https://localhost:18443/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"freshadmin","password":"<freshadmin-password>"}'
 
 docker compose -p dnlabfresh -f compose.yml down -v
 ```
 
-Run `./smoke.sh` after startup or distribution changes. It checks that the proxy is
-reachable, the GUI image does not install or import `dnlab-multinode`, the GUI
-does not mount the Docker socket, RealNet RR status goes through the API,
-`hosts.yml` validation is served by `dnlab-multinode`, `dnlab_frr` resolves to
-ContainerLab kind `linux`, and the lab-cleanup daemon has published state.
+Run `./smoke.sh` after startup or distribution changes. For self-signed TLS,
+set `DNLAB_SMOKE_PROXY_URL` and `DNLAB_SMOKE_CURL_INSECURE=1`. The smoke check
+verifies that the proxy is reachable, the GUI image does not install or import
+`dnlab-multinode`, the GUI does not mount the Docker socket, RealNet RR status
+goes through the API, `hosts.yml` validation is served by `dnlab-multinode`,
+`dnlab_frr` resolves to ContainerLab kind `linux`, and the lab-cleanup daemon
+has published state.
 
 Run `./preflight.sh` to exercise a fresh install in an isolated Compose project
 with an empty DB, first-admin bootstrap and login through the proxy.
