@@ -59,8 +59,8 @@ References:
 ## Docker Distribution Stack
 
 This repository contains the Docker distribution stack for dNLab. It uses GHCR
-image references and keeps application component source code in the separate
-source repositories.
+image references and documents source availability for published images in
+[SOURCE.md](SOURCE.md).
 
 The stack contains:
 
@@ -107,7 +107,7 @@ Run the initial smoke check:
 The default public URL is `http://localhost:8088`.
 
 In this distribution stack the GUI, multinode and lab-cleanup services default
-to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_IMAGE_TAG`.
+to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_VERSION`.
 
 ## Documentation
 
@@ -121,6 +121,10 @@ to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_IMAGE_TAG`.
   redistribution notes.
 - [DCO](DCO): Developer Certificate of Origin text.
 - [LICENSE](LICENSE): AGPL-3.0-or-later license text.
+- [LICENSE_FAQ.md](LICENSE_FAQ.md): practical notes for on-premises use,
+  AGPL obligations and commercial licensing.
+- [SOURCE.md](SOURCE.md): source availability policy for published dNLab
+  container images.
 
 ## Docker Auth Database
 
@@ -369,3 +373,8 @@ with the Developer Certificate of Origin 1.1. See
 
 dNLab is licensed under the GNU Affero General Public License v3.0 or later
 (`AGPL-3.0-or-later`). See [LICENSE](LICENSE) for details.
+
+Internal on-premises use does not require publishing your modifications solely
+because of that internal use. See [LICENSE_FAQ.md](LICENSE_FAQ.md) for practical
+notes on AGPL obligations and commercial licensing. See [SOURCE.md](SOURCE.md)
+for the source availability policy for published dNLab container images.

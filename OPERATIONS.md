@@ -8,7 +8,7 @@ This runbook describes the target Docker deployment model for dNLab.
 - Keep `dnlab-gui`, `dnlab-multinode`, `dnlab-image-build` and `dnlab-auth-db`
   on the internal Compose network.
 - Run `dnlab-lab-cleanup` as the Docker-native periodic stale-artifact
-  reconciler. It uses the same image as `dnlab-multinode`.
+  reconciler. It uses the dedicated `dnlab-lab-cleanup` image.
 - Do not install `dnlab-multinode` in the GUI image.
 - Do not mount `/var/run/docker.sock` in the GUI container.
 - Keep the DB image vanilla `postgres:16-alpine`; data belongs in volumes and
@@ -232,8 +232,7 @@ Current hardening choices:
   intentionally isolated operational boundary for Docker, ContainerLab and host
   orchestration.
 - `dnlab-lab-cleanup` runs from a dedicated slim image (`Dockerfile.cleanup`)
-  and reaches every host over SSH, so it needs no local Docker socket or
-  containerlab binary to do its work. It must remain internal-only.
+  and must remain internal-only.
 - `dnlab-image-build` keeps the Docker socket by design because image builds
   require Docker; keep it internal and do not expose it publicly.
 

@@ -11,6 +11,9 @@ contribution is submitted under `AGPL-3.0-or-later`.
 Contributors keep the copyright in their contributions. The project does not
 require copyright assignment.
 
+Unless a separate written agreement says otherwise, external contributions are
+accepted only under `AGPL-3.0-or-later`.
+
 ## Developer Certificate of Origin
 
 All contributions must comply with the Developer Certificate of Origin 1.1
@@ -39,5 +42,6 @@ Pull requests with unsigned commits may be blocked until the sign-off is added.
 ## Commercial Relicensing
 
 The DCO does not grant dNLab maintainers a separate right to relicense external
-contributions under commercial terms. Any commercial licensing arrangement for
-code contributed by third parties requires a separate written agreement.
+contributions under commercial terms. Any commercial licensing arrangement that
+includes code contributed by third parties requires a separate written agreement
+covering that code.

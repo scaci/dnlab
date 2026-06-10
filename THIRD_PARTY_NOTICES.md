@@ -3,7 +3,7 @@
 dNLab uses and integrates with third-party operating systems, container images,
 tools and network device images. This file records the initial project-level
 notices. Image-specific software bills of materials and package notices should
-be added for each published dNLab container image.
+be published as release artifacts or added here before a public image release.
 
 ## Runtime and Platform Components
 
@@ -31,7 +31,11 @@ complying with the relevant vendor license terms.
 
 ## Image SBOM / Package Notices
 
-Add one section per published GHCR image before release promotion:
+For each public GHCR image tag, publish image-specific SBOM/package notices as
+release artifacts or add an image-specific section here before release
+promotion. Do not use placeholder SBOM entries in a public release.
+
+Template:
 
 ```text
 ### ghcr.io/scaci/dnlab-<component>:<version>
