@@ -62,6 +62,10 @@ This repository contains the Docker distribution stack for dNLab. It uses GHCR
 image references and documents source availability for published images in
 [SOURCE.md](SOURCE.md).
 
+Public release packages are published as `ghcr.io/scaci/dnlab-*` container
+images and are linked to this public `scaci/dnlab` repository. The matching
+AGPL source archives are attached to the corresponding GitHub Release.
+
 Current release: `0.1.0`. The Compose stack requires `DNLAB_VERSION=0.1.0`
 in `.env`; this selects the published GHCR images for the release.
 

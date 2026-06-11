@@ -1,8 +1,9 @@
 # Source Availability
 
 dNLab container images are distributed through GitHub Container Registry
-(`GHCR`). The operational repositories used to build those images may remain
-private and are not the public source distribution channel.
+(`GHCR`) under the `ghcr.io/scaci/dnlab-*` image names. Public release packages
+are linked to the public `scaci/dnlab` repository, even when the operational
+repositories used to build those images remain private.
 
 For each public dNLab image tag, the corresponding source code will be
 published as a source archive attached to the matching dNLab release. The
