@@ -72,6 +72,17 @@ infrastructure:
   workers: {}
 ```
 
+For a multi-node install, use a dedicated network for cross-host lab dataplane
+traffic whenever possible. Explicitly declare the selected interface alias in
+`/etc/dnlab/hosts.yml` for the master and every worker, using the
+interface-alias key expected by the deployed inventory schema.
+
+Before starting installation, SSH key pairing must already work from the master
+to every host in `hosts.yml`. This includes master-to-master access through
+`localhost` or the configured master host value. Validate with non-interactive
+SSH, for example `ssh -o BatchMode=yes root@localhost true`, and repeat for each
+worker.
+
 ```bash
 test -f /etc/dnlab/paths.yml
 test -f /etc/dnlab/hosts.yml

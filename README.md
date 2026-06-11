@@ -104,6 +104,16 @@ For a single-node install, configure `hosts.yml` with `master.host: localhost`
 and no remote workers. Multi-node sites can add workers later without changing
 the Compose entrypoint.
 
+For a multi-node install, reserve a dedicated network for cross-host lab
+dataplane traffic whenever possible. Declare the selected interface alias in
+`/etc/dnlab/hosts.yml` for the master and for every worker so orchestration uses
+the intended fabric instead of an incidental management interface.
+
+Before installation, configure SSH key-based access from the master to every
+host listed in `hosts.yml`. This includes passwordless SSH from the master to
+itself, using `localhost` or the same master host value declared in the
+inventory.
+
 Create or install a TLS certificate before starting the browser-facing proxy.
 dNLab sets the GUI session cookie as HTTPS-only, so even local test installs
 should use TLS. For a local self-signed test certificate:

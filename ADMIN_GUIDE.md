@@ -57,6 +57,29 @@ infrastructure:
   workers: {}
 ```
 
+For a multi-node installation, use a dedicated network for cross-host lab
+dataplane traffic whenever possible, and declare the selected interface alias
+for every host in `hosts.yml`. The alias should refer to the intended
+multinode/dataplane fabric, not to an incidental management interface, unless
+the site intentionally shares those networks. A minimal inventory shape is:
+
+```yaml
+infrastructure:
+  master:
+    host: dnlab-master.example.com
+    ssh_user: root
+    interface: fabric0
+  workers:
+    worker1:
+      host: dnlab-worker1.example.com
+      ssh_user: root
+      interface: fabric0
+```
+
+Replace `interface` with the exact interface-alias key used by your deployed
+dNLab inventory schema if it differs, and replace `fabric0` with the site-local
+alias for the dedicated dataplane interface.
+
 Common host directories:
 
 ```bash
@@ -109,15 +132,21 @@ single seed command.
 
 1. Prepare `/etc/dnlab/hosts.yml`, `/etc/dnlab/paths.yml` and the host
    directories. For a single-node install, set `master.host` to `localhost`
-   and leave `workers` empty.
-2. Install a TLS certificate for the proxy. For a local test, a self-signed
+   and leave `workers` empty. For a multi-node install, declare the dedicated
+   dataplane interface alias for the master and every worker.
+2. Configure SSH key-based access from the master to every host in
+   `hosts.yml`, including master-to-master access through `localhost` or the
+   configured master host value. Validate it with a non-interactive command
+   such as `ssh -o BatchMode=yes root@localhost true` and repeat for every
+   worker before starting installation.
+3. Install a TLS certificate for the proxy. For a local test, a self-signed
    certificate under `/etc/ssl/dnlab` is acceptable; production should use a
    publicly trusted certificate.
-3. Copy `.env.example` to `.env`; set `POSTGRES_PASSWORD`,
+4. Copy `.env.example` to `.env`; set `POSTGRES_PASSWORD`,
    `DNLAB_PROXY_SERVER_NAME`, `DNLAB_PROXY_WEBUI_SUFFIX`,
    `DNLAB_PROXY_HTTPS_PORT`, `DNLAB_PROXY_TLS_DIR`,
    `DNLABGUI_ALLOWED_ORIGINS` and `DNLABGUI_WEBUI_HOST_SUFFIX`.
-4. Start the proxy dependency chain from the published GHCR release images:
+5. Start the proxy dependency chain from the published GHCR release images:
 
 ```bash
 docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
