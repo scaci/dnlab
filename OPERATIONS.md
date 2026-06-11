@@ -282,7 +282,8 @@ COMPOSE_FILES=compose.yml:compose.tls.yml:compose.hardened.yml ./smoke.sh
 - GUI container has no Docker socket;
 - `dnlab_multinode` package is not installed in the GUI image;
 - GUI app import does not load `dnlab_multinode` modules;
-- RealNet RR status is served through `dnlab-multinode`;
+- RealNet RR status is served through `dnlab-multinode`; the RR container is
+  expected only for RealNet BGP, not for NAT-only RealNet labs;
 - `hosts.yml` validation is served through `dnlab-multinode`;
 - Docker image discovery is served by `dnlab-multinode`;
 - `dnlab-lab-cleanup` is running and has published a state snapshot;

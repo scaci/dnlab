@@ -265,6 +265,27 @@ Use the Admin page to update global RealNet BGP settings, regenerate the route
 reflector password when needed and reconcile the route reflector service.
 Device-side BGP configuration remains explicit inside each virtual device.
 
+The global `dnlab-realnet-rr` container is BGP-only infrastructure. It is not
+created for NAT-only RealNet labs; those labs only create their per-lab
+`dnlab-<lab>-<realnet>-realnet` router.
+
+In the Docker distribution, `/etc/dnlab` is mounted read-only inside the GUI and
+multinode containers. Prepare or update the host-side `hosts.yml` before
+enabling BGP mode on a RealNet node, or use the Admin write action against a
+writable host config path. A minimal BGP block looks like this:
+
+```yaml
+infrastructure:
+  realnet:
+    rr_as: 64512
+    rr_ip: 10.0.0.10
+    host_net: 10.0.0.0/24
+    router_as_pool: 64513-65534
+    router_ip_pool: 10.0.0.20-10.0.0.250
+    realnet_network_pool: 100.64.0.0/10
+    rr_password: change-me
+```
+
 ## Image Build And Image Sync
 
 `dnlab-image-build` provides an internal API for upload, build jobs and job log

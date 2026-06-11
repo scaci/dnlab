@@ -293,6 +293,12 @@ goes through the API, `hosts.yml` validation is served by `dnlab-multinode`,
 `dnlab_frr` resolves to ContainerLab kind `linux`, and the lab-cleanup daemon
 has published state.
 
+`dnlab-realnet-rr` is only created when RealNet BGP is enabled and
+`infrastructure.realnet.rr_ip` plus `infrastructure.realnet.host_net` are
+configured in `hosts.yml`. NAT-only RealNet labs create their per-lab
+`dnlab-<lab>-<realnet>-realnet` router, but do not create the global route
+reflector container.
+
 Run `./preflight.sh` to exercise a fresh install in an isolated Compose project
 with an empty DB, first-admin bootstrap and login through the proxy.
 
