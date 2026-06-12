@@ -157,9 +157,31 @@ the intended fabric instead of an incidental management interface.
 Before installation, configure SSH key-based access from the master to every
 host listed in `hosts.yml`. This includes passwordless SSH from the master to
 itself, using the same master host value declared in the inventory. For
-single-node installs, pre-populate `/root/.ssh/known_hosts` with the Docker
-gateway host key before starting the containers, because `/root/.ssh` is mounted
-read-only inside them.
+manual installs, create the dedicated keypair on the master and keep the
+private key there:
+
+```bash
+sudo install -d -m 0700 /root/.ssh
+sudo test -f /root/.ssh/id_ed25519_github_dnlab || \
+  sudo ssh-keygen -t ed25519 -N '' \
+    -f /root/.ssh/id_ed25519_github_dnlab \
+    -C "dnlab@$(hostname)"
+sudo chmod 0600 /root/.ssh/id_ed25519_github_dnlab
+```
+
+Install `/root/.ssh/id_ed25519_github_dnlab.pub` in
+`/root/.ssh/authorized_keys` on the configured master target and on every
+worker. For remote workers, use:
+
+```bash
+sudo ssh-copy-id -i /root/.ssh/id_ed25519_github_dnlab.pub root@<worker-host>
+```
+
+For single-node installs, pre-populate `/root/.ssh/known_hosts` with the Docker
+gateway host key. For multi-node installs, record the configured master and
+worker host keys there as well before starting the containers, because
+`/root/.ssh` is mounted read-only inside them. Validate the result from the
+master with `ssh -o BatchMode=yes root@<host> true`.
 
 Create or install a TLS certificate before starting the browser-facing proxy.
 dNLab sets the GUI session cookie as HTTPS-only, so even local test installs

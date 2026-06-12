@@ -81,8 +81,11 @@ Pre-start checklist:
   `persistence:` sections.
 - For single-node installs, set `/etc/dnlab/hosts.yml` to the Docker-network
   gateway address reachable from containers.
-- Populate `/root/.ssh/known_hosts` with the configured master host key before
-  starting containers, because `/root/.ssh` is mounted read-only inside them.
+- Create the dedicated root SSH keypair used by dNLab, for example
+  `/root/.ssh/id_ed25519_github_dnlab`.
+- Populate `/root/.ssh/known_hosts` with the configured master and worker host
+  keys before starting containers, because `/root/.ssh` is mounted read-only
+  inside them.
 
 For a single-node install, `/etc/dnlab/hosts.yml` should use the Docker-network
 gateway address as the master and no remote workers. Do not use `localhost`:
@@ -129,6 +132,45 @@ to every host in `hosts.yml`. This includes master-to-master access through the
 configured master host value. Validate with non-interactive SSH, for example
 `ssh -o BatchMode=yes root@<master.host> true`, and repeat for each worker.
 For single-node installs, test the gateway address configured in `hosts.yml`.
+
+Create the dedicated keypair on the master if it does not already exist. Keep
+the private key on the master only:
+
+```bash
+install -d -m 0700 /root/.ssh
+test -f /root/.ssh/id_ed25519_github_dnlab || \
+  ssh-keygen -t ed25519 -N '' \
+    -f /root/.ssh/id_ed25519_github_dnlab \
+    -C "dnlab@$(hostname)"
+chmod 0600 /root/.ssh/id_ed25519_github_dnlab
+```
+
+Install the public key on every SSH target declared in `hosts.yml`. For
+single-node installs and for master-to-master access, authorize it locally:
+
+```bash
+touch /root/.ssh/authorized_keys
+chmod 0600 /root/.ssh/authorized_keys
+grep -qF "$(cat /root/.ssh/id_ed25519_github_dnlab.pub)" /root/.ssh/authorized_keys || \
+  cat /root/.ssh/id_ed25519_github_dnlab.pub >>/root/.ssh/authorized_keys
+```
+
+For remote workers, distribute the same public key with an operator-approved
+method, for example:
+
+```bash
+ssh-copy-id -i /root/.ssh/id_ed25519_github_dnlab.pub root@<worker-host>
+```
+
+If `ssh-copy-id` is not available, append the public key to
+`/root/.ssh/authorized_keys` on the worker with the same `0600` file mode. Then
+record the host keys for the configured master and workers before starting the
+containers:
+
+```bash
+ssh-keyscan -H <master.host> >>/root/.ssh/known_hosts
+ssh-keyscan -H <worker-host> >>/root/.ssh/known_hosts
+```
 
 If `paths.yml` points `ssh_key` at a dedicated key, be aware that some RealNet
 flows may still look for `/root/.ssh/id_ed25519`. Provide a controlled alias,

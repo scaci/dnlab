@@ -130,11 +130,28 @@ fi
 The Compose stack mounts `/etc/dnlab` read-only into the GUI and internal
 services.
 
-Prepare SSH from the same point of view used by the containers. For single-node
-installs, `master.host` should be reachable from `dnlab-multinode` over SSH.
-Because `/root/.ssh` is mounted read-only inside the containers, add the
-configured master host key to `/root/.ssh/known_hosts` on the host before
-starting the stack. Some RealNet paths may still look for
+Prepare SSH from the same point of view used by the containers. For manual
+installs, create the dedicated keypair on the master and keep the private key
+there:
+
+```bash
+install -d -m 0700 /root/.ssh
+test -f /root/.ssh/id_ed25519_github_dnlab || \
+  ssh-keygen -t ed25519 -N '' \
+    -f /root/.ssh/id_ed25519_github_dnlab \
+    -C "dnlab@$(hostname)"
+chmod 0600 /root/.ssh/id_ed25519_github_dnlab
+```
+
+Install `/root/.ssh/id_ed25519_github_dnlab.pub` in
+`/root/.ssh/authorized_keys` on every host declared in `hosts.yml`, including
+the configured master target for master-to-master access. For remote workers,
+`ssh-copy-id -i /root/.ssh/id_ed25519_github_dnlab.pub root@<worker-host>` is
+acceptable when available. For single-node installs, `master.host` should be
+reachable from `dnlab-multinode` over SSH. Because `/root/.ssh` is mounted
+read-only inside the containers, add the configured master and worker host keys
+to `/root/.ssh/known_hosts` on the host before starting the stack. Some RealNet
+paths may still look for
 `/root/.ssh/id_ed25519`; if you use a dedicated key in `paths.yml`, provide a
 controlled alias, symlink or copy at the default key path with the same
 permissions as the source key.
@@ -179,11 +196,13 @@ LXC privileges, nesting and storage.
    gateway, and leave `workers` empty. For a multi-node install, declare the
    dedicated dataplane interface alias for the master and every worker.
 2. Configure SSH key-based access from the master to every host in
-   `hosts.yml`, including master-to-master access through the configured
-   master host value. Validate it with a non-interactive command such as
+   `hosts.yml`. Generate `/root/.ssh/id_ed25519_github_dnlab` if needed,
+   install its public key in `/root/.ssh/authorized_keys` on the configured
+   master target and every worker, and keep the private key only on the master.
+   Validate access with a non-interactive command such as
    `ssh -o BatchMode=yes root@<master.host> true` and repeat for every worker
-   before starting installation. Also ensure the configured master host key is
-   already present in `/root/.ssh/known_hosts`.
+   before starting installation. Also ensure the configured master and worker
+   host keys are already present in `/root/.ssh/known_hosts`.
 3. Install a TLS certificate for the proxy. For a local test, a self-signed
    certificate under `/etc/ssl/dnlab` is acceptable; production should use a
    publicly trusted certificate.
