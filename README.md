@@ -50,6 +50,11 @@ References:
 - Docker Engine on Debian: <https://docs.docker.com/engine/install/debian/>
 - Docker Engine 29 release notes: <https://docs.docker.com/engine/release-notes/29/>
 
+For Proxmox deployments, see
+[dNLab Proxmox LXC Template](docs/proxmox-lxc-template.md). Pull the ready-made
+LXC template from GitHub Container Registry; it keeps secrets, TLS material and
+site-specific host configuration out of the published archive.
+
 ### Suggested multinode reference design
 
 <p align="center">
@@ -84,6 +89,7 @@ The stack contains:
 Prepare host directories and configuration:
 
 ```bash
+sudo apt-get install -y ripgrep
 sudo mkdir -p /etc/dnlab /root/dnlab-topologies \
   /var/lib/docker/dnlab-backups /var/log/dnlab-gui \
   /var/log/dnlab-multinode /var/lib/dnlab-image-build /opt/vrnetlab
@@ -104,9 +110,44 @@ Create `/etc/dnlab/hosts.yml` and `/etc/dnlab/paths.yml` for your site before
 deploying real labs. The GUI and the internal services mount `/etc/dnlab`
 read-only.
 
-For a single-node install, configure `hosts.yml` with `master.host: localhost`
-and no remote workers. Multi-node sites can add workers later without changing
-the Compose entrypoint.
+For a single-node install, configure `hosts.yml` with the Docker-network
+gateway address that containers can use to reach the host SSH daemon, and no
+remote workers. Do not use `localhost` for `master.host`: inside the dNLab
+containers it refers to the container itself, not to the Docker host. For
+example, if the `dnlab_dnlab-internal` gateway is `172.18.0.1`:
+
+```yaml
+infrastructure:
+  master:
+    host: 172.18.0.1
+    ssh_user: root
+  workers: {}
+```
+
+The gateway address is installation-specific; confirm it with Docker before
+writing `hosts.yml`, for example:
+
+```bash
+docker network inspect dnlab_dnlab-internal --format '{{(index .IPAM.Config 0).Gateway}}'
+```
+
+Use top-level keys in `/etc/dnlab/paths.yml`. Do not wrap these values in
+`paths:` or `persistence:` sections:
+
+```yaml
+hosts_file: /etc/dnlab/hosts.yml
+image_sync_state: /var/lib/dnlab-image-sync/state.json
+persist_root: /var/lib/docker/dnlab-backups
+topologies_dir: /root/dnlab-topologies
+ssh_key: /root/.ssh/id_ed25519_github_dnlab
+log_dir_multinode: /var/log/dnlab-multinode
+log_dir_gui: /var/log/dnlab-gui
+tmp_dir: /tmp
+containerlab_bin: /usr/bin/containerlab
+docker_socket: unix:///var/run/docker.sock
+```
+
+Multi-node sites can add workers later without changing the Compose entrypoint.
 
 For a multi-node install, reserve a dedicated network for cross-host lab
 dataplane traffic whenever possible. Declare the selected interface alias in
@@ -115,8 +156,10 @@ the intended fabric instead of an incidental management interface.
 
 Before installation, configure SSH key-based access from the master to every
 host listed in `hosts.yml`. This includes passwordless SSH from the master to
-itself, using `localhost` or the same master host value declared in the
-inventory.
+itself, using the same master host value declared in the inventory. For
+single-node installs, pre-populate `/root/.ssh/known_hosts` with the Docker
+gateway host key before starting the containers, because `/root/.ssh` is mounted
+read-only inside them.
 
 Create or install a TLS certificate before starting the browser-facing proxy.
 dNLab sets the GUI session cookie as HTTPS-only, so even local test installs
@@ -136,6 +179,7 @@ Start the stack:
 ```bash
 cp .env.example .env
 # Edit .env and set POSTGRES_PASSWORD plus the TLS values below.
+docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
 docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
 ```
 
@@ -146,6 +190,17 @@ DNLAB_VERSION=0.1.0
 DNLAB_IMAGE_PREFIX=ghcr.io/scaci/
 DNLAB_RUNTIME_IMAGE_PREFIX=ghcr.io/scaci/dnlab-
 ```
+
+The public release images are readable without a registry login. If you point
+the image prefixes at a private mirror, authenticate Docker separately from Git
+SSH access before pulling images:
+
+```bash
+echo '<github-token-with-package-read-access>' | docker login ghcr.io -u <github-user> --password-stdin
+```
+
+SSH access to the GitHub repository does not grant Docker access to private
+container registries.
 
 For a local self-signed HTTPS test, use:
 
@@ -158,8 +213,11 @@ DNLABGUI_ALLOWED_ORIGINS=https://localhost:8443
 DNLABGUI_WEBUI_HOST_SUFFIX=localhost
 ```
 
-With those values, `docker compose up` pulls and runs the published
-`ghcr.io/scaci/dnlab-*:0.1.0` release images.
+With those values, the `release-images` pull profile downloads the full
+published `ghcr.io/scaci/dnlab-*:0.1.0` image set, including runtime images
+that are created later by lab orchestration. Use `--profile release-images`
+only for `pull`; normal `up` commands should continue to target `dnlab-proxy`
+or explicit runtime services.
 
 Run the initial smoke check:
 
@@ -417,45 +475,48 @@ flowchart TD
 
 ### Prerequisites
 
-- A Containerlab-compatible environment on each node. <!-- [TODO: confirm minimum Containerlab version] -->
+- A Containerlab-compatible environment on each node.
 - Container runtime and the virtual network device images you intend to use.
 - The dNLab vrnetlab image-build tree cloned at `/opt/vrnetlab` from
   `https://github.com/scaci/vrnetlab.git`, branch `dnlab`.
 - One or more Linux hosts to run lab devices. In a single-node deployment, the
-  master host is also the worker. <!-- [TODO: confirm OS/kernel requirements] -->
+  master host is also the worker.
 
 ### Installation
 
 ```bash
-# [TODO: replace with the real installation steps]
-git clone [TODO: repository URL]
+git clone https://github.com/scaci/dnlab.git
 cd dnlab
-# [TODO: build / install command]
+cp .env.example .env
+# Edit .env, set POSTGRES_PASSWORD and TLS values.
+docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
+docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
 ```
+
+The `release-images` profile is a pull-only helper. It downloads both Compose
+service images and runtime helper images used later by lab orchestration; do
+not use it with normal `up` commands.
 
 ### Quick Start
 
 ```bash
-# [TODO: replace with the real CLI invocation]
-dnlab deploy [TODO: path/to/topology]
+COMPOSE_FILES=compose.yml:compose.tls.yml \
+DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
+DNLAB_SMOKE_CURL_INSECURE=1 \
+./smoke.sh
 ```
 
 ## Usage
 
-Define a lab and deploy it on the configured dNLab host or hosts:
-
-```bash
-# [TODO: replace with the real topology format and deploy syntax]
-dnlab deploy ./labs/example/[TODO: topology-file]
-```
-
-<!-- [TODO: document the topology file format and the fields that control distribution] -->
+Open the GUI through the HTTPS proxy, seed the first administrator if this is a
+fresh install, and create or import labs from the browser. The backend uses the
+images selected by `DNLAB_VERSION`, `DNLAB_IMAGE_PREFIX` and
+`DNLAB_RUNTIME_IMAGE_PREFIX`; no local dNLab image build is part of the public
+installation flow.
 
 ## Collaboration & RBAC
 
 dNLab includes a Role-Based Access Control system that governs who can view, modify, and run shared labs. Permissions are attached to roles, and roles are assigned to users, so a team can grant the right level of access — for example, read-only access to a shared lab versus full control — without managing permissions one user at a time.
-
-<!-- [TODO: document the specific roles and the permissions each one grants] -->
 
 ## Contributing
 

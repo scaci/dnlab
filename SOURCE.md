@@ -53,3 +53,17 @@ The source archive generation and publication workflow is maintained as a
 release engineering process in the private operational documentation. This
 document records the public source availability policy; it does not require
 private operational repositories to be made public.
+
+## Proxmox LXC Template
+
+Some releases also include a ready-made Proxmox LXC template published as an
+OCI artifact on GitHub Container Registry, for example
+`ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0`. The template is a distribution binary;
+it is not committed to this repository.
+
+The public reproducible sources for that template are the files under `lxc/`
+plus the tagged dNLab distribution files copied into `/opt/dnlab` inside the
+template. The LXC template does not replace the per-image AGPL source archives
+listed above; those remain the corresponding source for the GHCR images used by
+the stack. The same LXC files may be attached to the GitHub Release as a
+browser-friendly mirror, but GHCR is the canonical registry location.

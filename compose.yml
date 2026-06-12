@@ -204,6 +204,54 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  dnlab-release-jumphost-image:
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}jumphost:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    profiles:
+      - release-images
+    entrypoint: ["sh", "-c", "exit 0"]
+    network_mode: "none"
+    restart: "no"
+
+  dnlab-release-dns-image:
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}dns:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    profiles:
+      - release-images
+    entrypoint: ["sh", "-c", "exit 0"]
+    network_mode: "none"
+    restart: "no"
+
+  dnlab-release-runtime-relay-image:
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}runtime-relay:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    profiles:
+      - release-images
+    entrypoint: ["sh", "-c", "exit 0"]
+    network_mode: "none"
+    restart: "no"
+
+  dnlab-release-realnet-router-image:
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}realnet-router:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    profiles:
+      - release-images
+    entrypoint: ["sh", "-c", "exit 0"]
+    network_mode: "none"
+    restart: "no"
+
+  dnlab-release-realnet-rr-image:
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}realnet-rr:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    profiles:
+      - release-images
+    entrypoint: ["sh", "-c", "exit 0"]
+    network_mode: "none"
+    restart: "no"
+
+  dnlab-release-mgmt-anchor-image:
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}mgmt-anchor:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    profiles:
+      - release-images
+    entrypoint: ["sh", "-c", "exit 0"]
+    network_mode: "none"
+    restart: "no"
+
 networks:
   dnlab-internal:
 

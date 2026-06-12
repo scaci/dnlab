@@ -59,17 +59,64 @@ one seed command, then remove them from the shell history if needed.
 
 ## Fresh Install
 
+For Proxmox LXC installs, use the ready-made template published on GitHub
+Container Registry and follow
+[dNLab Proxmox LXC Template](docs/proxmox-lxc-template.md).
+Runtime operations after first boot use the same Compose stack and smoke checks
+described below.
+
 1. Prepare host-side config and directories:
 
-For a single-node install, `/etc/dnlab/hosts.yml` should use `localhost` as the
-master and no remote workers:
+Pre-start checklist:
+
+- Install host prerequisites, including Docker, Compose, Containerlab, `curl`
+  and `ripgrep`; `./smoke.sh` uses `rg` for its final guardrail.
+- Public release images are readable without registry login. If the deployment
+  uses a private mirror, run `docker login` for that registry first; Git SSH
+  access to the repository does not authenticate Docker to container registries.
+- Pull dNLab release images with
+  `docker compose --profile release-images pull`; plain `docker compose pull`
+  only covers active Compose services and is not a complete product preload.
+- Create `/etc/dnlab/paths.yml` with top-level keys, not nested `paths:` or
+  `persistence:` sections.
+- For single-node installs, set `/etc/dnlab/hosts.yml` to the Docker-network
+  gateway address reachable from containers.
+- Populate `/root/.ssh/known_hosts` with the configured master host key before
+  starting containers, because `/root/.ssh` is mounted read-only inside them.
+
+For a single-node install, `/etc/dnlab/hosts.yml` should use the Docker-network
+gateway address as the master and no remote workers. Do not use `localhost`:
+inside the dNLab containers it refers to the container itself. For example, if
+the `dnlab_dnlab-internal` gateway is `172.18.0.1`:
 
 ```yaml
 infrastructure:
   master:
-    host: localhost
+    host: 172.18.0.1
     ssh_user: root
   workers: {}
+```
+
+The gateway address is installation-specific; confirm it with Docker before
+writing `hosts.yml`:
+
+```bash
+docker network inspect dnlab_dnlab-internal --format '{{(index .IPAM.Config 0).Gateway}}'
+```
+
+Use this top-level shape for `/etc/dnlab/paths.yml`:
+
+```yaml
+hosts_file: /etc/dnlab/hosts.yml
+image_sync_state: /var/lib/dnlab-image-sync/state.json
+persist_root: /var/lib/docker/dnlab-backups
+topologies_dir: /root/dnlab-topologies
+ssh_key: /root/.ssh/id_ed25519_github_dnlab
+log_dir_multinode: /var/log/dnlab-multinode
+log_dir_gui: /var/log/dnlab-gui
+tmp_dir: /tmp
+containerlab_bin: /usr/bin/containerlab
+docker_socket: unix:///var/run/docker.sock
 ```
 
 For a multi-node install, use a dedicated network for cross-host lab dataplane
@@ -78,10 +125,14 @@ traffic whenever possible. Explicitly declare the selected interface alias in
 interface-alias key expected by the deployed inventory schema.
 
 Before starting installation, SSH key pairing must already work from the master
-to every host in `hosts.yml`. This includes master-to-master access through
-`localhost` or the configured master host value. Validate with non-interactive
-SSH, for example `ssh -o BatchMode=yes root@localhost true`, and repeat for each
-worker.
+to every host in `hosts.yml`. This includes master-to-master access through the
+configured master host value. Validate with non-interactive SSH, for example
+`ssh -o BatchMode=yes root@<master.host> true`, and repeat for each worker.
+For single-node installs, test the gateway address configured in `hosts.yml`.
+
+If `paths.yml` points `ssh_key` at a dedicated key, be aware that some RealNet
+flows may still look for `/root/.ssh/id_ed25519`. Provide a controlled alias,
+symlink or copy at the default key path when those flows are enabled.
 
 ```bash
 test -f /etc/dnlab/paths.yml
@@ -124,16 +175,21 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
   -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 ```
 
-4. Pull and start the published release images through the TLS proxy:
+4. Pull all published dNLab release images, then start through the TLS proxy:
 
 ```bash
-docker compose -f compose.yml -f compose.tls.yml pull
+docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
 docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
 COMPOSE_FILES=compose.yml:compose.tls.yml \
 DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
 DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
+
+Use `--profile release-images` only with `pull`. It preloads the runtime helper
+images that are not directly started by Compose during installation but are
+needed when labs create jumphost, DNS, relay, RealNet and management-anchor
+containers.
 
 5. Seed the first admin:
 
@@ -199,11 +255,11 @@ docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
   > auth-db-dumps/dnlab_auth_before_upgrade.sql
 ```
 
-2. Pull the release images selected by `.env`:
+2. Pull the full release image set selected by `.env`:
 
 ```bash
 grep '^DNLAB_VERSION=0.1.0$' .env
-docker compose -f compose.yml pull
+docker compose -f compose.yml --profile release-images pull
 ```
 
 3. Recreate via proxy dependency chain:
@@ -306,6 +362,34 @@ migrations through GUI startup, seeds the first admin, verifies login through
 the proxy, checks GUI isolation, checks that the GUI image does not install
 `dnlab-multinode`, and verifies the image-build API. The project is removed
 automatically unless `DNLAB_PREFLIGHT_KEEP=1` is set.
+
+## Release Engineering Notes
+
+The authoritative release helper sources live in the private operational
+repository under `/root/dnlab-dev-docs/scripts`. Local copies under
+`/opt/dnlab/scripts` are ignored by the public repository and must be synced
+from the private source before a release. Do not publish those local copies.
+
+For a versioned release, follow the established release runbook order:
+
+1. Sync the private helpers into `/opt/dnlab/scripts`.
+2. Run `release_ghcr.py` to prepare distribution files and local `vX.Y.Z` tags.
+3. Push the tags and verify GitHub Actions and GHCR packages.
+4. Run `release_sources.py` to upload the AGPL source archives and `SHA256SUMS`
+   to `scaci/dnlab@vX.Y.Z`.
+5. Run preflight and smoke checks against the published images.
+6. Build the Proxmox LXC template from the tagged distribution checkout with
+   `lxc/build-proxmox-template.sh --version X.Y.Z`.
+7. Validate the template on Proxmox, then publish it as an OCI artifact with
+   `oras push ghcr.io/scaci/dnlab-lxc-proxmox:X.Y.Z`. Include the `.tar.zst`,
+   `LXC-RELEASE-NOTES-X.Y.Z.md` and `SHA256SUMS`, and add the optional
+   `vX.Y.Z` tag.
+8. Pull the GHCR artifact into a clean directory, verify `SHA256SUMS`, and
+   repeat the Proxmox import smoke before announcing the LXC template.
+
+If an internal helper is added for LXC publication, its authoritative source
+belongs in `/root/dnlab-dev-docs/scripts`; any `/opt/dnlab/scripts` copy remains
+local operational state.
 
 ## Backups And Restore
 

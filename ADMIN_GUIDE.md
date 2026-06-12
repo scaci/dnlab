@@ -47,14 +47,25 @@ Required files:
 The `master` entry identifies the host that runs the Compose stack and
 orchestration services. Worker entries identify hosts that can run lab devices.
 For a single-node installation, the same host acts as both master and worker;
-use `localhost` as the master and omit remote workers:
+use the Docker-network gateway address that containers can use to reach the
+host SSH daemon, and omit remote workers. Do not use `localhost` here: inside
+the dNLab containers it refers to the container itself, not to the Docker host.
+For example, if the `dnlab_dnlab-internal` gateway is `172.18.0.1`:
 
 ```yaml
 infrastructure:
   master:
-    host: localhost
+    host: 172.18.0.1
     ssh_user: root
   workers: {}
+```
+
+The gateway address is installation-specific. Confirm it with Docker before
+writing `hosts.yml`, for example by inspecting the dNLab internal network after
+it exists:
+
+```bash
+docker network inspect dnlab_dnlab-internal --format '{{(index .IPAM.Config 0).Gateway}}'
 ```
 
 For a multi-node installation, use a dedicated network for cross-host lab
@@ -80,6 +91,22 @@ Replace `interface` with the exact interface-alias key used by your deployed
 dNLab inventory schema if it differs, and replace `fabric0` with the site-local
 alias for the dedicated dataplane interface.
 
+`/etc/dnlab/paths.yml` uses top-level keys. Do not wrap the values in `paths:`
+or `persistence:` sections:
+
+```yaml
+hosts_file: /etc/dnlab/hosts.yml
+image_sync_state: /var/lib/dnlab-image-sync/state.json
+persist_root: /var/lib/docker/dnlab-backups
+topologies_dir: /root/dnlab-topologies
+ssh_key: /root/.ssh/id_ed25519_github_dnlab
+log_dir_multinode: /var/log/dnlab-multinode
+log_dir_gui: /var/log/dnlab-gui
+tmp_dir: /tmp
+containerlab_bin: /usr/bin/containerlab
+docker_socket: unix:///var/run/docker.sock
+```
+
 Common host directories:
 
 ```bash
@@ -102,6 +129,15 @@ fi
 
 The Compose stack mounts `/etc/dnlab` read-only into the GUI and internal
 services.
+
+Prepare SSH from the same point of view used by the containers. For single-node
+installs, `master.host` should be reachable from `dnlab-multinode` over SSH.
+Because `/root/.ssh` is mounted read-only inside the containers, add the
+configured master host key to `/root/.ssh/known_hosts` on the host before
+starting the stack. Some RealNet paths may still look for
+`/root/.ssh/id_ed25519`; if you use a dedicated key in `paths.yml`, provide a
+controlled alias, symlink or copy at the default key path with the same
+permissions as the source key.
 
 ## Environment File
 
@@ -130,15 +166,24 @@ single seed command.
 
 ## First Install
 
+For Proxmox LXC installs from the published template, start with
+[dNLab Proxmox LXC Template](docs/proxmox-lxc-template.md). The template
+is pulled from GitHub Container Registry, preinstalls host prerequisites and runs an
+idempotent first-boot configurator, but still requires operator validation of
+LXC privileges, nesting and storage.
+
 1. Prepare `/etc/dnlab/hosts.yml`, `/etc/dnlab/paths.yml` and the host
-   directories. For a single-node install, set `master.host` to `localhost`
-   and leave `workers` empty. For a multi-node install, declare the dedicated
-   dataplane interface alias for the master and every worker.
+   directories. For a single-node install, set `master.host` to the
+   Docker-network gateway address reachable from containers, such as
+   `172.18.0.1` in an installation where that is the dNLab internal-network
+   gateway, and leave `workers` empty. For a multi-node install, declare the
+   dedicated dataplane interface alias for the master and every worker.
 2. Configure SSH key-based access from the master to every host in
-   `hosts.yml`, including master-to-master access through `localhost` or the
-   configured master host value. Validate it with a non-interactive command
-   such as `ssh -o BatchMode=yes root@localhost true` and repeat for every
-   worker before starting installation.
+   `hosts.yml`, including master-to-master access through the configured
+   master host value. Validate it with a non-interactive command such as
+   `ssh -o BatchMode=yes root@<master.host> true` and repeat for every worker
+   before starting installation. Also ensure the configured master host key is
+   already present in `/root/.ssh/known_hosts`.
 3. Install a TLS certificate for the proxy. For a local test, a self-signed
    certificate under `/etc/ssl/dnlab` is acceptable; production should use a
    publicly trusted certificate.
@@ -146,13 +191,22 @@ single seed command.
    `DNLAB_PROXY_SERVER_NAME`, `DNLAB_PROXY_WEBUI_SUFFIX`,
    `DNLAB_PROXY_HTTPS_PORT`, `DNLAB_PROXY_TLS_DIR`,
    `DNLABGUI_ALLOWED_ORIGINS` and `DNLABGUI_WEBUI_HOST_SUFFIX`.
-5. Start the proxy dependency chain from the published GHCR release images:
+5. Public release images are readable without registry login. If the deployment
+   uses a private mirror, authenticate Docker to that registry first; Git SSH
+   access to the repository is separate from Docker registry access.
+6. Pull the full published GHCR image set, then start the proxy dependency
+   chain:
 
 ```bash
+docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
 docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
 ```
 
-5. Run `./smoke.sh` against the HTTPS URL. For a self-signed local test:
+Use `--profile release-images` only for `pull`. It includes runtime images
+such as jumphost, DNS, RealNet and management-anchor helpers that are created
+later by lab orchestration; it is not part of the normal `up` command.
+
+7. Run `./smoke.sh` against the HTTPS URL. For a self-signed local test:
 
 ```bash
 COMPOSE_FILES=compose.yml:compose.tls.yml \
@@ -161,7 +215,7 @@ DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
 
-6. Seed the first administrator:
+8. Seed the first administrator:
 
 ```bash
 DNLABGUI_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -169,7 +223,7 @@ DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD='<one-time-password>' \
 docker compose -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
 ```
 
-7. Run the HTTPS smoke check again.
+9. Run the HTTPS smoke check again.
 
 See [OPERATIONS.md](OPERATIONS.md) for the full runbook.
 
@@ -326,8 +380,13 @@ must be the `dnlab` branch of `https://github.com/scaci/vrnetlab.git`.
 ![Image build admin](docs/images/admin-image-build.png)
 
 `dnlab-image-sync` tracks image availability across nodes. After adding or
-building images, verify image discovery and image sync before asking users to
-start labs that depend on those images.
+importing virtual device images, verify image discovery and image sync before
+asking users to start labs that depend on those images. dNLab release helper
+images are not built locally during installation; preload them with:
+
+```bash
+docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
+```
 
 ## Lab Cleanup Reconciler
 
@@ -367,7 +426,8 @@ proxy.
 Before upgrading:
 
 1. Back up the auth DB with `pg_dump`.
-2. Build or pull the target images.
+2. Pull the full target release image set with the Compose `release-images`
+   profile.
 3. Recreate the internal services and proxy through the Compose dependency
    chain.
 4. Run `./smoke.sh`.
@@ -393,8 +453,11 @@ run smoke checks.
 - A user cannot create labs: confirm the role is not `rookie`.
 - A second assistant cannot be created: dNLab allows only one local-db
   `assistant`.
-- Device images are missing: check Docker image discovery, image-build jobs and
-  image sync.
+- dNLab helper images are missing: run
+  `docker compose --profile release-images pull`, then check image sync for
+  worker nodes.
+- Virtual device images are missing: check Docker image discovery, image-build
+  jobs and image sync.
 - Lab start fails: inspect the pre-deploy plan, service health and
   `dnlab-multinode` logs.
 - Device Web UI fails: check lab deployment state, device state, wildcard DNS,
