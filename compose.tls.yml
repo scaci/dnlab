@@ -1,20 +1,2 @@
-services:
-  dnlab-gui:
-    environment:
-      DNLABGUI_ALLOWED_ORIGINS: ${DNLABGUI_ALLOWED_ORIGINS:?set DNLABGUI_ALLOWED_ORIGINS=https://<hostname>}
-      DNLABGUI_WEBUI_HOST_SUFFIX: ${DNLABGUI_WEBUI_HOST_SUFFIX:?set DNLABGUI_WEBUI_HOST_SUFFIX}
-
-  dnlab-proxy:
-    environment:
-      DNLAB_PROXY_MODE: tls
-      DNLAB_PROXY_SERVER_NAME: ${DNLAB_PROXY_SERVER_NAME:?set DNLAB_PROXY_SERVER_NAME}
-      DNLAB_PROXY_WEBUI_SUFFIX: ${DNLAB_PROXY_WEBUI_SUFFIX:-}
-      DNLAB_PROXY_SERVER_ADMIN: ${DNLAB_PROXY_SERVER_ADMIN:-dnlab@example.invalid}
-      DNLAB_PROXY_CERT_FILE: ${DNLAB_PROXY_CERT_FILE:-/etc/ssl/dnlab/dnlab-gui.crt}
-      DNLAB_PROXY_CERT_KEY_FILE: ${DNLAB_PROXY_CERT_KEY_FILE:-/etc/ssl/dnlab/dnlab-gui.key}
-    ports:
-      - "${DNLAB_PROXY_HTTP_PORT:-80}:80"
-      - "${DNLAB_PROXY_HTTPS_PORT:-443}:443"
-    volumes:
-      - ${DNLAB_PROXY_TLS_DIR:-/etc/ssl/dnlab}:/etc/ssl/dnlab:ro
-      - ${DNLAB_PROXY_ACME_DIR:-/var/www/acme-challenge}:/var/www/acme-challenge
+name: dnlab
+services: {}

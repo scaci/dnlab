@@ -183,6 +183,16 @@ worker host keys there as well before starting the containers, because
 `/root/.ssh` is mounted read-only inside them. Validate the result from the
 master with `ssh -o BatchMode=yes root@<host> true`.
 
+Create the dedicated keypair on the master to manage jumphost container, the sandbox to manage labs
+
+```bash
+test -f /root/.ssh/dnlab-gui.key || \
+  ssh-keygen -t ed25519 -N '' \
+    -f /root/.ssh/dnlab-gui.key \
+    -C "dnlab@$(hostname)"
+chmod 0600 /root/.ssh/dnlab-gui.key
+```
+
 Create or install a TLS certificate before starting the browser-facing proxy.
 dNLab sets the GUI session cookie as HTTPS-only, so even local test installs
 should use TLS. For a local self-signed test certificate:
@@ -200,9 +210,9 @@ Start the stack:
 
 ```bash
 cp .env.example .env
-# Edit .env and set POSTGRES_PASSWORD plus the TLS values below.
-docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
-docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
+# Edit .env and set POSTGRES_PASSWORD plus DNLAB_PROXY_SERVER_NAME/TLS values.
+docker compose -f compose.yml --profile release-images pull
+docker compose -f compose.yml up -d dnlab-proxy
 ```
 
 The release image settings copied from `.env.example` are:
@@ -224,15 +234,13 @@ echo '<github-token-with-package-read-access>' | docker login ghcr.io -u <github
 SSH access to the GitHub repository does not grant Docker access to private
 container registries.
 
-For a local self-signed HTTPS test, use:
+TLS is always enabled in `compose.yml`. For a local self-signed HTTPS test, use:
 
 ```env
 DNLAB_PROXY_SERVER_NAME=localhost
-DNLAB_PROXY_WEBUI_SUFFIX=localhost
 DNLAB_PROXY_HTTPS_PORT=8443
 DNLAB_PROXY_TLS_DIR=/etc/ssl/dnlab
 DNLABGUI_ALLOWED_ORIGINS=https://localhost:8443
-DNLABGUI_WEBUI_HOST_SUFFIX=localhost
 ```
 
 With those values, the `release-images` pull profile downloads the full
@@ -244,14 +252,14 @@ or explicit runtime services.
 Run the initial smoke check:
 
 ```bash
-COMPOSE_FILES=compose.yml:compose.tls.yml \
+COMPOSE_FILES=compose.yml \
 DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
 DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
 
 The default local test URL with the values above is
-`https://localhost:8443/`. Browsers will warn about a self-signed certificate;
+`https://localhost:8443/`. `DNLAB_PROXY_SERVER_NAME` is also used for Apache `ServerName`, Apache wildcard aliases and the GUI WebUI host suffix. Browsers will warn about a self-signed certificate;
 accept it only for local testing. Production deployments should use a publicly
 trusted certificate and normally expose HTTPS on port 443.
 
@@ -262,8 +270,6 @@ to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_VERSION`.
 
 - [USER_GUIDE.md](USER_GUIDE.md): browser workflows for lab users.
 - [ADMIN_GUIDE.md](ADMIN_GUIDE.md): platform administration guide.
-- [OPERATIONS.md](OPERATIONS.md): production-oriented runbook covering fresh
-  install, TLS mode, production hardening, upgrade, backups and smoke checks.
 - [CONTRIBUTING.md](CONTRIBUTING.md): contribution process and DCO
   requirements.
 - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): third-party notices and
@@ -313,7 +319,7 @@ docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
 docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
   < auth-db-dumps/dnlab_auth_from_old_container.sql
-docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
+docker compose -f compose.yml up -d dnlab-proxy
 ```
 
 ## Docker Service Boundaries
@@ -352,21 +358,17 @@ POSTGRES_PASSWORD=fresh-check-password \
 DNLAB_PROXY_HTTP_PORT=18088 \
 DNLAB_PROXY_HTTPS_PORT=18443 \
 DNLAB_PROXY_SERVER_NAME=localhost \
-DNLAB_PROXY_WEBUI_SUFFIX=localhost \
 DNLAB_PROXY_TLS_DIR=/tmp/dnlab-fresh-tls \
 DNLABGUI_ALLOWED_ORIGINS=https://localhost:18443 \
-DNLABGUI_WEBUI_HOST_SUFFIX=localhost \
 DNLAB_TOPOLOGIES_DIR=/tmp/dnlab-fresh-topologies \
-docker compose -p dnlabfresh -f compose.yml -f compose.tls.yml up -d dnlab-proxy
+docker compose -p dnlabfresh -f compose.yml up -d dnlab-proxy
 
 POSTGRES_PASSWORD=fresh-check-password \
 DNLAB_PROXY_HTTP_PORT=18088 \
 DNLAB_PROXY_HTTPS_PORT=18443 \
 DNLAB_PROXY_SERVER_NAME=localhost \
-DNLAB_PROXY_WEBUI_SUFFIX=localhost \
 DNLAB_PROXY_TLS_DIR=/tmp/dnlab-fresh-tls \
 DNLABGUI_ALLOWED_ORIGINS=https://localhost:18443 \
-DNLABGUI_WEBUI_HOST_SUFFIX=localhost \
 DNLAB_TOPOLOGIES_DIR=/tmp/dnlab-fresh-topologies \
 DNLABGUI_BOOTSTRAP_ADMIN_USERNAME=freshadmin \
 DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD='<freshadmin-password>' \
@@ -421,31 +423,24 @@ TLS proxy profile:
 
 ```bash
 DNLAB_PROXY_SERVER_NAME=dnlab.example.com \
-DNLAB_PROXY_WEBUI_SUFFIX=dnlab.example.com \
 DNLABGUI_ALLOWED_ORIGINS=https://dnlab.example.com \
-DNLABGUI_WEBUI_HOST_SUFFIX=dnlab.example.com \
 DNLAB_PROXY_TLS_DIR=/etc/ssl/dnlab \
-docker compose -f compose.yml -f compose.tls.yml up -d --force-recreate dnlab-gui dnlab-proxy
+docker compose -f compose.yml up -d --force-recreate dnlab-gui dnlab-proxy
 ```
 
 The TLS directory must contain the certificate and key referenced by
 `DNLAB_PROXY_CERT_FILE` and `DNLAB_PROXY_CERT_KEY_FILE`, defaulting to
 `/etc/ssl/dnlab/dnlab-gui.crt` and `/etc/ssl/dnlab/dnlab-gui.key` inside the
 proxy container. Wildcard WebUI needs DNS and certificate coverage for both the
-GUI hostname and `*.${DNLAB_PROXY_WEBUI_SUFFIX}`. The `compose.tls.yml`
-override requires `DNLABGUI_ALLOWED_ORIGINS` and `DNLABGUI_WEBUI_HOST_SUFFIX`
-so WebSocket origin checks and wildcard WebUI URLs match the browser-facing
-hostname.
+GUI hostname and `*.${DNLAB_PROXY_SERVER_NAME}`. `DNLAB_PROXY_SERVER_NAME` drives Apache `ServerName`, Apache wildcard aliases and the GUI WebUI suffix, so WebSocket origin checks and wildcard WebUI URLs match the browser-facing hostname.
 
-Production hardening profile:
+Production hardening profile (`compose.hardened.yml` remains the only active override):
 
 ```bash
 DNLAB_PROXY_SERVER_NAME=dnlab.example.com \
-DNLAB_PROXY_WEBUI_SUFFIX=dnlab.example.com \
 DNLABGUI_ALLOWED_ORIGINS=https://dnlab.example.com \
-DNLABGUI_WEBUI_HOST_SUFFIX=dnlab.example.com \
 DNLAB_PROXY_TLS_DIR=/etc/ssl/dnlab \
-docker compose -f compose.yml -f compose.tls.yml -f compose.hardened.yml up -d --force-recreate dnlab-gui dnlab-proxy
+docker compose -f compose.yml -f compose.hardened.yml up -d --force-recreate dnlab-gui dnlab-proxy
 ```
 
 The hardening override makes the GUI root filesystem read-only, drops GUI Linux
@@ -511,8 +506,8 @@ git clone https://github.com/scaci/dnlab.git
 cd dnlab
 cp .env.example .env
 # Edit .env, set POSTGRES_PASSWORD and TLS values.
-docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
-docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
+docker compose -f compose.yml --profile release-images pull
+docker compose -f compose.yml up -d dnlab-proxy
 ```
 
 The `release-images` profile is a pull-only helper. It downloads both Compose
@@ -522,7 +517,7 @@ not use it with normal `up` commands.
 ### Quick Start
 
 ```bash
-COMPOSE_FILES=compose.yml:compose.tls.yml \
+COMPOSE_FILES=compose.yml \
 DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
 DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh

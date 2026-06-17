@@ -4,14 +4,12 @@ This guide is for people who use the dNLab browser interface to create, run,
 observe and share network labs. It assumes an administrator has already
 deployed dNLab and created your account.
 
-For platform setup and operations, see [ADMIN_GUIDE.md](ADMIN_GUIDE.md) and
-[OPERATIONS.md](OPERATIONS.md).
+For platform setup and operations, see [ADMIN_GUIDE.md](ADMIN_GUIDE.md).
 
 ## Sign In
 
 Open the dNLab URL provided by your administrator. In a local default install
-this may be `http://localhost:8088`; production deployments normally use a
-site hostname such as `https://dnlab.example.com`.
+this may be `https://localhost:8443` with a self-signed certificate; production deployments normally use a site hostname such as `https://dnlab.example.com`.
 
 ![dNLab login page](docs/images/user-login.png)
 

@@ -89,7 +89,7 @@ The first-boot service runs `/usr/local/sbin/dnlab-firstboot`, which:
 - creates a local root SSH key and authorizes it for root-to-root access;
 - creates the Compose network, discovers its gateway and writes
   `/etc/dnlab/hosts.yml`;
-- starts `docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy`.
+- starts `docker compose -f compose.yml up -d dnlab-proxy`.
 
 Docker Compose pulls the images needed by the startup path. To preload runtime
 helper images used later by lab orchestration, run this optional command inside
@@ -97,7 +97,7 @@ the CT:
 
 ```bash
 cd /opt/dnlab
-docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
+docker compose -f compose.yml --profile release-images pull
 ```
 
 The generated HTTPS URL defaults to port `8443`:
@@ -135,14 +135,14 @@ Useful checks inside the CT:
 docker version
 docker compose version
 containerlab version
-docker compose -f /opt/dnlab/compose.yml -f /opt/dnlab/compose.tls.yml ps
+docker compose -f /opt/dnlab/compose.yml ps
 ```
 
 Run the HTTPS smoke check:
 
 ```bash
 cd /opt/dnlab
-COMPOSE_FILES=compose.yml:compose.tls.yml \
+COMPOSE_FILES=compose.yml \
 DNLAB_SMOKE_PROXY_URL=https://<ct-ip>:8443/ \
 DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh

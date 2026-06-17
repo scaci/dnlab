@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 COMPOSE_FILES="${COMPOSE_FILES:-${COMPOSE_FILE:-compose.yml}}"
-PROXY_URL="${DNLAB_SMOKE_PROXY_URL:-http://127.0.0.1:${DNLAB_PROXY_HTTP_PORT:-8088}/}"
+PROXY_URL="${DNLAB_SMOKE_PROXY_URL:-https://localhost:${DNLAB_PROXY_HTTPS_PORT:-443}/}"
 IFS=: read -r -a COMPOSE_FILE_LIST <<EOF
 $COMPOSE_FILES
 EOF
@@ -18,10 +18,7 @@ compose() {
   docker compose "${args[@]}" "$@"
 }
 
-curl_args=(-sS)
-if [ "${DNLAB_SMOKE_CURL_INSECURE:-0}" = "1" ] || [ "${DNLAB_SMOKE_CURL_INSECURE:-}" = "true" ]; then
-  curl_args+=(-k)
-fi
+curl_args=(-sSk)
 if [ -n "${DNLAB_SMOKE_CURL_RESOLVE:-}" ]; then
   curl_args+=(--resolve "$DNLAB_SMOKE_CURL_RESOLVE")
 fi

@@ -1,8 +1,8 @@
 # dNLab Admin Guide
 
 This guide is for administrators who deploy and operate the dNLab Docker
-distribution stack. It complements [OPERATIONS.md](OPERATIONS.md), which is the
-command-focused runbook.
+distribution stack. It is the authoritative guide for installation, TLS,
+validation, hardening, upgrade, backup and release operations.
 
 For end-user workflows in the browser, see [USER_GUIDE.md](USER_GUIDE.md).
 
@@ -156,10 +156,39 @@ paths may still look for
 controlled alias, symlink or copy at the default key path with the same
 permissions as the source key.
 
+Create the dedicated keypair to manage jumphost container:
+
+```bash
+test -f /root/.ssh/dnlab-gui.key || \
+  ssh-keygen -t ed25519 -N '' \
+    -f /root/.ssh/dnlab-gui.key \
+    -C "dnlab@$(hostname)"
+chmod 0600 /root/.ssh/dnlab-gui.key
+```
+
 ## Environment File
 
 Create `.env` from `.env.example` and set a strong database password before
-starting the stack.
+starting the stack. At minimum, set:
+
+```text
+DNLAB_VERSION=0.1.0
+POSTGRES_PASSWORD=<long random value>
+DNLAB_PROXY_SERVER_NAME=<gui-hostname>
+DNLAB_PROXY_HTTPS_PORT=<https-port>
+DNLAB_PROXY_TLS_DIR=<host TLS directory>
+DNLABGUI_ALLOWED_ORIGINS=https://<gui-origin>
+```
+
+TLS is always enabled by the base Compose file. For a local self-signed test,
+`localhost` and port `8443` are acceptable:
+
+```text
+DNLAB_PROXY_SERVER_NAME=localhost
+DNLAB_PROXY_HTTPS_PORT=8443
+DNLAB_PROXY_TLS_DIR=/etc/ssl/dnlab
+DNLABGUI_ALLOWED_ORIGINS=https://localhost:8443
+```
 
 Important settings:
 
@@ -168,12 +197,10 @@ Important settings:
 - `DNLAB_RUNTIME_IMAGE_PREFIX`: runtime image prefix, normally
   `ghcr.io/scaci/dnlab-`.
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: auth DB settings.
-- `DNLAB_PROXY_HTTP_PORT`: public HTTP port for non-TLS mode.
-- `DNLAB_PROXY_SERVER_NAME`: public GUI hostname in TLS mode.
-- `DNLAB_PROXY_WEBUI_SUFFIX`: wildcard suffix used for per-device Web UI hosts.
+- `DNLAB_PROXY_HTTP_PORT`: public HTTP port used for ACME challenge and HTTP-to-HTTPS redirect.
+- `DNLAB_PROXY_SERVER_NAME`: public GUI hostname; also drives Apache wildcard aliases and the GUI Web UI suffix.
 - `DNLABGUI_ALLOWED_ORIGINS`: browser-facing origin for CORS and WebSocket
   origin checks.
-- `DNLABGUI_WEBUI_HOST_SUFFIX`: GUI-side wildcard suffix for device Web UI URLs.
 - `DNLAB_TOPOLOGIES_DIR`, `DNLAB_PERSIST_ROOT`, `DNLAB_LOG_DIR_GUI`,
   `DNLAB_LOG_DIR_MULTINODE`, `DNLAB_IMAGE_BUILD_WORKSPACE`: host-side storage
   and log directories.
@@ -206,10 +233,19 @@ LXC privileges, nesting and storage.
 3. Install a TLS certificate for the proxy. For a local test, a self-signed
    certificate under `/etc/ssl/dnlab` is acceptable; production should use a
    publicly trusted certificate.
+
+```bash
+mkdir -p /etc/ssl/dnlab
+openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+  -keyout /etc/ssl/dnlab/dnlab-gui.key \
+  -out /etc/ssl/dnlab/dnlab-gui.crt \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
 4. Copy `.env.example` to `.env`; set `POSTGRES_PASSWORD`,
-   `DNLAB_PROXY_SERVER_NAME`, `DNLAB_PROXY_WEBUI_SUFFIX`,
-   `DNLAB_PROXY_HTTPS_PORT`, `DNLAB_PROXY_TLS_DIR`,
-   `DNLABGUI_ALLOWED_ORIGINS` and `DNLABGUI_WEBUI_HOST_SUFFIX`.
+   `DNLAB_PROXY_SERVER_NAME`, `DNLAB_PROXY_HTTPS_PORT`,
+   `DNLAB_PROXY_TLS_DIR` and `DNLABGUI_ALLOWED_ORIGINS`.
 5. Public release images are readable without registry login. If the deployment
    uses a private mirror, authenticate Docker to that registry first; Git SSH
    access to the repository is separate from Docker registry access.
@@ -217,8 +253,8 @@ LXC privileges, nesting and storage.
    chain:
 
 ```bash
-docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
-docker compose -f compose.yml -f compose.tls.yml up -d dnlab-proxy
+docker compose -f compose.yml --profile release-images pull
+docker compose -f compose.yml up -d dnlab-proxy
 ```
 
 Use `--profile release-images` only for `pull`. It includes runtime images
@@ -228,7 +264,7 @@ later by lab orchestration; it is not part of the normal `up` command.
 7. Run `./smoke.sh` against the HTTPS URL. For a self-signed local test:
 
 ```bash
-COMPOSE_FILES=compose.yml:compose.tls.yml \
+COMPOSE_FILES=compose.yml \
 DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
 DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
@@ -244,24 +280,31 @@ docker compose -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
 
 9. Run the HTTPS smoke check again.
 
-See [OPERATIONS.md](OPERATIONS.md) for the full runbook.
-
 ## TLS And Wildcard Web UI
 
-The TLS override is `compose.tls.yml`.
+TLS is built into `compose.yml`; `compose.tls.yml` remains only as a no-op
+compatibility file for older commands and should not be treated as an active
+override.
 
 ```bash
 DNLAB_PROXY_SERVER_NAME=dnlab.example.com \
-DNLAB_PROXY_WEBUI_SUFFIX=dnlab.example.com \
 DNLABGUI_ALLOWED_ORIGINS=https://dnlab.example.com \
-DNLABGUI_WEBUI_HOST_SUFFIX=dnlab.example.com \
 DNLAB_PROXY_TLS_DIR=/etc/ssl/dnlab \
-docker compose -f compose.yml -f compose.tls.yml up -d --force-recreate dnlab-gui dnlab-proxy
+docker compose -f compose.yml up -d --force-recreate dnlab-gui dnlab-proxy
 ```
 
+`DNLAB_PROXY_SERVER_NAME` is the single public-host setting for the proxy and
+GUI. Compose derives Apache wildcard aliases and the GUI Web UI suffix from it.
 The TLS directory is mounted inside the proxy container as `/etc/ssl/dnlab`.
 It must contain the certificate and key referenced by `DNLAB_PROXY_CERT_FILE`
 and `DNLAB_PROXY_CERT_KEY_FILE`.
+
+Verify the proxy after TLS changes:
+
+```bash
+docker compose -f compose.yml exec -T dnlab-proxy apache2ctl configtest
+curl -kI https://dnlab.example.com/
+```
 
 For production, use a publicly trusted certificate. If per-device Web UI access
 uses wildcard hostnames, request a certificate that covers both
@@ -271,7 +314,7 @@ require DNS-01 validation.
 Wildcard Web UI support requires DNS and certificate coverage for:
 
 - `DNLAB_PROXY_SERVER_NAME`, such as `dnlab.example.com`;
-- `*.${DNLAB_PROXY_WEBUI_SUFFIX}`, such as `*.dnlab.example.com`.
+- `*.${DNLAB_PROXY_SERVER_NAME}`, such as `*.dnlab.example.com`.
 
 The proxy receives browser requests for per-device Web UI hostnames and routes
 them to the matching Web UI tunnel created by dNLab.
@@ -404,7 +447,7 @@ asking users to start labs that depend on those images. dNLab release helper
 images are not built locally during installation; preload them with:
 
 ```bash
-docker compose -f compose.yml -f compose.tls.yml --profile release-images pull
+docker compose -f compose.yml --profile release-images pull
 ```
 
 ## Lab Cleanup Reconciler
@@ -428,6 +471,34 @@ Manual checks:
 ```bash
 docker compose -f compose.yml exec dnlab-lab-cleanup \
   dnlab-lab-cleanup sync --dry-run --json
+
+docker compose -f compose.yml exec dnlab-lab-cleanup \
+  dnlab-lab-cleanup sync --execute --json
+```
+
+## Production Hardening
+
+Use `compose.hardened.yml` after the base Compose file when validating a
+production-like stack:
+
+```bash
+docker compose \
+  -f compose.yml \
+  -f compose.hardened.yml \
+  up -d --force-recreate dnlab-gui dnlab-proxy
+```
+
+The hardening override makes the GUI filesystem read-only, drops GUI Linux
+capabilities, adds tmpfs mounts for transient paths, and applies
+`no-new-privileges` to GUI, proxy, auth DB and image-build. `dnlab-multinode`
+remains the privileged orchestration boundary for Docker, ContainerLab and host
+operations. `dnlab-image-build` keeps the Docker socket because image builds
+require Docker and the service remains internal-only.
+
+Run smoke with the same Compose file set:
+
+```bash
+COMPOSE_FILES=compose.yml:compose.hardened.yml ./smoke.sh
 ```
 
 ## Validation
@@ -436,23 +507,59 @@ Run `./smoke.sh` after startup or Docker distribution changes. It checks proxy
 reachability, GUI isolation, internal API boundaries, image discovery, lab
 cleanup state and key Docker-stack invariants.
 
+Specifically, smoke verifies that:
+
+- the proxy is reachable;
+- the GUI container has no Docker socket;
+- the GUI image does not install or import `dnlab-multinode`;
+- RealNet RR status, `hosts.yml` validation and image discovery go through
+  `dnlab-multinode`;
+- `dnlab-lab-cleanup` is running and has published a state snapshot;
+- `vrnetlab/dnlab_frr` resolves to ContainerLab kind `linux`.
+
 Run `./preflight.sh` for a fresh-install validation in an isolated Compose
 project with an empty database, first-admin bootstrap and login through the
-proxy.
+TLS proxy. It starts HTTPS on `18443` and HTTP redirect/ACME on `18080`, runs
+Alembic migrations through GUI startup, checks GUI isolation, checks that the
+GUI image does not install `dnlab-multinode`, and verifies the image-build API.
+The project is removed automatically unless `DNLAB_PREFLIGHT_KEEP=1` is set.
 
 ## Upgrade
 
-Before upgrading:
+Before upgrading, back up the auth DB:
 
-1. Back up the auth DB with `pg_dump`.
-2. Pull the full target release image set with the Compose `release-images`
-   profile.
-3. Recreate the internal services and proxy through the Compose dependency
-   chain.
-4. Run `./smoke.sh`.
-5. Inspect cleanup dry-run reports before enabling cleanup execution.
+```bash
+mkdir -p auth-db-dumps
+docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
+  'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' \
+  > auth-db-dumps/dnlab_auth_before_upgrade.sql
+```
 
-Use [OPERATIONS.md](OPERATIONS.md) for exact commands.
+Pull the full release image set selected by `.env`, then recreate the internal
+services and proxy:
+
+```bash
+grep '^DNLAB_VERSION=0.1.0$' .env
+docker compose -f compose.yml --profile release-images pull
+docker compose -f compose.yml up -d --force-recreate dnlab-multinode dnlab-lab-cleanup dnlab-image-build dnlab-gui dnlab-proxy
+```
+
+Run guardrails:
+
+```bash
+./smoke.sh
+```
+
+After validating cleanup dry-run reports, either keep scheduled dry-runs or
+switch the reconciler to execution mode in `/etc/dnlab/hosts.yml`:
+
+```yaml
+lab_cleanup:
+  enabled: true
+  interval_seconds: 300
+  grace_seconds: 600
+  dry_run: false
+```
 
 ## Backup And Restore
 
@@ -463,6 +570,48 @@ artifacts.
 Restore is an operator action, not a Docker build step. Stop the GUI before
 restoring, reset the target schema, load the dump, restart through the proxy and
 run smoke checks.
+
+```bash
+docker compose -f compose.yml stop dnlab-gui
+docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
+  'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema public cascade; create schema public;"'
+docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
+  'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
+  < auth-db-dumps/dnlab_auth_restore.sql
+docker compose -f compose.yml up -d dnlab-proxy
+COMPOSE_FILES=compose.yml \
+DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
+DNLAB_SMOKE_CURL_INSECURE=1 \
+./smoke.sh
+```
+
+## Release Engineering
+
+The authoritative release helper sources live in the private operational
+repository under `/root/dnlab-dev-docs/scripts`. Local copies under
+`/opt/dnlab/scripts` are ignored by the public repository and must be synced
+from the private source before a release. Do not publish those local copies.
+
+For a versioned release, follow this order:
+
+1. Sync the private helpers into `/opt/dnlab/scripts`.
+2. Run `release_ghcr.py` to prepare distribution files and local `vX.Y.Z` tags.
+3. Push the tags and verify GitHub Actions and GHCR packages.
+4. Run `release_sources.py` to upload the AGPL source archives and
+   `SHA256SUMS` to `scaci/dnlab@vX.Y.Z`.
+5. Run preflight and smoke checks against the published images.
+6. Build the Proxmox LXC template from the tagged distribution checkout with
+   `lxc/build-proxmox-template.sh --version X.Y.Z`.
+7. Validate the template on Proxmox, then publish it as an OCI artifact with
+   `oras push ghcr.io/scaci/dnlab-lxc-proxmox:X.Y.Z`. Include the `.tar.zst`,
+   `LXC-RELEASE-NOTES-X.Y.Z.md` and `SHA256SUMS`, and add the optional
+   `vX.Y.Z` tag.
+8. Pull the GHCR artifact into a clean directory, verify `SHA256SUMS`, and
+   repeat the Proxmox import smoke before announcing the LXC template.
+
+If an internal helper is added for LXC publication, its authoritative source
+belongs in `/root/dnlab-dev-docs/scripts`; any `/opt/dnlab/scripts` copy remains
+local operational state.
 
 ## Troubleshooting
 
