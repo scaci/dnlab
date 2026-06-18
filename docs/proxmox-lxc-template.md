@@ -309,13 +309,14 @@ oras push ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0 \
   proxmox-dnlab-ct.conf:text/plain \
   apply-proxmox-ct-tuning.sh:application/x-sh \
   SHA256SUMS:text/plain
-oras tag ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0 v0.1.0
 ```
 
-Do not commit the generated template archive to the repository. If the files
-are also attached to the GitHub Release as a mirror, add the template checksum
-to the release `SHA256SUMS` without dropping existing source-archive checksum
-entries.
+Use `0.1.0` as the GHCR artifact tag. Keep `v0.1.0` for the GitHub Release
+and git source tag only, otherwise GitHub Packages shows a second container
+version for the same release. Do not commit the generated template archive to
+the repository. If the files are also attached to the GitHub Release as a
+mirror, add the template checksum to the release `SHA256SUMS` without dropping
+existing source-archive checksum entries.
 
 The public reproducible sources for the LXC template are:
 
