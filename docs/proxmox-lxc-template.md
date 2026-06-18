@@ -3,6 +3,9 @@
 This guide is for administrators who want to run dNLab from the ready-made
 Proxmox LXC template published on GitHub Container Registry.
 
+This artifact is built and supported for Proxmox LXC. Generic LXC runtimes are
+not a supported target for this template.
+
 You do not need to build the template yourself for a normal installation. The
 build scripts in `lxc/` are the public reproducible sources for the template and
 are mainly useful for release maintainers and auditors.
@@ -30,6 +33,8 @@ The artifact contains:
 ```text
 dnlab-lxc-proxmox-0.1.0-amd64.tar.zst
 LXC-RELEASE-NOTES-0.1.0.md
+proxmox-dnlab-ct.conf
+apply-proxmox-ct-tuning.sh
 SHA256SUMS
 ```
 
@@ -39,6 +44,30 @@ mirror, but GHCR is the canonical registry location.
 The template does not contain production secrets, admin bootstrap credentials,
 site TLS certificates or a fixed hostname. Those are generated or configured
 inside each CT.
+
+## Prepare The Proxmox Host
+
+dNLab LXC deployments need enough loop devices for nested lab workloads. On the
+Proxmox host, add `loop.max_loop=64` to the kernel command line. With the
+default GRUB flow, edit `/etc/default/grub` and include it in
+`GRUB_CMDLINE_LINUX_DEFAULT`, for example:
+
+```text
+GRUB_CMDLINE_LINUX_DEFAULT="quiet loop.max_loop=64"
+```
+
+Then update GRUB and reboot the Proxmox node:
+
+```bash
+update-grub
+reboot
+```
+
+After reboot, verify the host command line:
+
+```bash
+grep -w loop.max_loop=64 /proc/cmdline
+```
 
 ## Create The CT
 
@@ -72,6 +101,38 @@ unprivileged: 0
 Use reliable local ext4 or xfs-backed storage for Docker data. Increase CPU,
 memory and disk for larger network labs or image-build workloads.
 
+### Proxmox CT Tuning
+
+Before first boot, add the dNLab raw-device tuning to the Proxmox CT config on
+the host, normally `/etc/pve/lxc/<CTID>.conf`. The pulled artifact includes
+`proxmox-dnlab-ct.conf` and an idempotent helper:
+
+```bash
+chmod +x apply-proxmox-ct-tuning.sh
+./apply-proxmox-ct-tuning.sh <CTID>
+```
+
+The helper creates a timestamped backup of the CT config and appends only
+missing lines. If you prefer to edit the CT config manually, add this block:
+
+```text
+lxc.cgroup2.devices.allow: c 10:232 rwm
+lxc.mount.entry: /dev/kvm dev/kvm none bind,optional,create=file
+
+lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net/tun dev/net/tun none bind,optional,create=file
+
+lxc.cgroup2.devices.allow: b 7:* rwm
+lxc.mount.entry: /dev/loop-control dev/loop-control none bind,optional,create=file
+
+lxc.cgroup2.devices.allow: c 10:229 rwm
+lxc.mount.entry: /dev/fuse dev/fuse none bind,optional,create=file
+
+lxc.autodev: 1
+```
+
+Restart the CT after changing `/etc/pve/lxc/<CTID>.conf`.
+
 ## First Boot
 
 Start the CT and wait for `dnlab-firstboot.service` to finish:
@@ -87,6 +148,8 @@ The first-boot service runs `/usr/local/sbin/dnlab-firstboot`, which:
 - creates a local self-signed certificate under `/etc/ssl/dnlab`;
 - writes `/etc/dnlab/paths.yml`;
 - creates a local root SSH key and authorizes it for root-to-root access;
+- creates the GUI-to-jumphost SSH key used for Web UI, console and log
+  tunnels;
 - creates the Compose network, discovers its gateway and writes
   `/etc/dnlab/hosts.yml`;
 - starts `docker compose -f compose.yml up -d dnlab-proxy`.
@@ -108,6 +171,50 @@ https://<ct-ip>:8443/
 
 Because the default certificate is self-signed, your browser will show a
 certificate warning. Replace it with a site certificate before production use.
+
+## Configure Site Settings
+
+The LXC template is already installed, but the generated instance still needs
+site-specific settings in `/opt/dnlab/.env`. This corresponds to the bare metal
+environment-file step in [ADMIN_GUIDE.md](../ADMIN_GUIDE.md), with the host
+prerequisites and first config files already prepared by first boot.
+
+Run the guided configurator inside the CT:
+
+```bash
+sudo dnlab-configure-env
+```
+
+It prompts for:
+
+- `DNLAB_PROXY_SERVER_NAME`: public GUI hostname or IP;
+- `DNLAB_PROXY_HTTP_PORT` and `DNLAB_PROXY_HTTPS_PORT`: public proxy ports;
+- `DNLAB_PROXY_TLS_DIR`: host directory mounted into the proxy as
+  `/etc/ssl/dnlab`;
+- `DNLABGUI_ALLOWED_ORIGINS`: browser-facing HTTPS origin;
+- `DNLAB_PROXY_CERT_FILE` and `DNLAB_PROXY_CERT_KEY_FILE`: certificate and key
+  paths as seen inside the proxy container.
+
+If the configured certificate or key is missing under the TLS directory, the
+script can generate a new local self-signed certificate for the selected
+hostname. For production, install a publicly trusted certificate and point the
+certificate settings at that material instead.
+
+The generated `/etc/dnlab/paths.yml` should match the bare metal shape and
+include both SSH keys:
+
+```yaml
+ssh_key: /root/.ssh/id_ed25519_github_dnlab
+ssh_gui_key: /root/.ssh/dnlab-gui.key
+```
+
+If you edit `.env` manually instead of using the guided script, recreate the GUI
+and proxy after changing hostname, origin, ports or TLS settings:
+
+```bash
+cd /opt/dnlab
+docker compose -f compose.yml up -d --force-recreate dnlab-gui dnlab-proxy
+```
 
 ## Create The First Admin
 
@@ -161,6 +268,12 @@ them:
 sudo DNLAB_FIRSTBOOT_REWRITE_HOSTS=1 DNLAB_FIRSTBOOT_REWRITE_PATHS=1 dnlab-firstboot
 ```
 
+To rerun only the hostname, port and TLS prompts, use:
+
+```bash
+sudo dnlab-configure-env
+```
+
 ## Maintainers
 
 The template archive is generated by dNLab maintainers and published as an OCI
@@ -178,8 +291,10 @@ The output files are written to `dist/lxc` by default:
 
 ```text
 dnlab-lxc-proxmox-0.1.0-amd64.tar.zst
-SHA256SUMS
 LXC-RELEASE-NOTES-0.1.0.md
+proxmox-dnlab-ct.conf
+apply-proxmox-ct-tuning.sh
+SHA256SUMS
 ```
 
 Publish the template as an OCI artifact after GHCR image publication,
@@ -191,6 +306,8 @@ oras login ghcr.io
 oras push ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0 \
   dnlab-lxc-proxmox-0.1.0-amd64.tar.zst:application/vnd.proxmox.lxc.template.v1.tar+zstd \
   LXC-RELEASE-NOTES-0.1.0.md:text/markdown \
+  proxmox-dnlab-ct.conf:text/plain \
+  apply-proxmox-ct-tuning.sh:application/x-sh \
   SHA256SUMS:text/plain
 oras tag ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0 v0.1.0
 ```
@@ -203,8 +320,11 @@ entries.
 The public reproducible sources for the LXC template are:
 
 - `lxc/build-proxmox-template.sh`
+- `lxc/apply-proxmox-ct-tuning.sh`
+- `lxc/dnlab-configure-env.sh`
 - `lxc/dnlab-firstboot.sh`
 - `lxc/dnlab-firstboot.service`
+- `lxc/proxmox-dnlab-ct.conf`
 - the tagged dNLab distribution files copied into `/opt/dnlab`
 
 The operational release helpers remain private. Their authoritative copies live

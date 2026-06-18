@@ -100,12 +100,17 @@ image_sync_state: /var/lib/dnlab-image-sync/state.json
 persist_root: /var/lib/docker/dnlab-backups
 topologies_dir: /root/dnlab-topologies
 ssh_key: /root/.ssh/id_ed25519_github_dnlab
+ssh_gui_key: /root/.ssh/dnlab-gui.key
 log_dir_multinode: /var/log/dnlab-multinode
 log_dir_gui: /var/log/dnlab-gui
 tmp_dir: /tmp
 containerlab_bin: /usr/bin/containerlab
 docker_socket: unix:///var/run/docker.sock
 ```
+
+`ssh_key` is the master-to-worker orchestration key used by backend services.
+`ssh_gui_key` is the GUI-to-jumphost key used for Web UI, console and log
+tunnels.
 
 Common host directories:
 
@@ -156,7 +161,9 @@ paths may still look for
 controlled alias, symlink or copy at the default key path with the same
 permissions as the source key.
 
-Create the dedicated keypair to manage jumphost container:
+Create the dedicated keypair declared as `ssh_gui_key` in `paths.yml`. The GUI
+uses it to reach per-lab jumphost containers for Web UI, console and log
+tunnels:
 
 ```bash
 test -f /root/.ssh/dnlab-gui.key || \
@@ -210,11 +217,10 @@ single seed command.
 
 ## First Install
 
-For Proxmox LXC installs from the published template, start with
-[dNLab Proxmox LXC Template](docs/proxmox-lxc-template.md). The template
-is pulled from GitHub Container Registry, preinstalls host prerequisites and runs an
-idempotent first-boot configurator, but still requires operator validation of
-LXC privileges, nesting and storage.
+### Bare Metal Install
+
+Use this path when installing the Docker distribution directly on one or more
+Linux hosts. Bare metal remains the reference deployment model.
 
 1. Prepare `/etc/dnlab/hosts.yml`, `/etc/dnlab/paths.yml` and the host
    directories. For a single-node install, set `master.host` to the
@@ -222,7 +228,10 @@ LXC privileges, nesting and storage.
    `172.18.0.1` in an installation where that is the dNLab internal-network
    gateway, and leave `workers` empty. For a multi-node install, declare the
    dedicated dataplane interface alias for the master and every worker.
-2. Configure SSH key-based access from the master to every host in
+2. Install or verify the dNLab vrnetlab tree at `/opt/vrnetlab`; it is used by
+   `dnlab-image-build` and should be the `dnlab` branch of
+   `https://github.com/scaci/vrnetlab.git`.
+3. Configure SSH key-based access from the master to every host in
    `hosts.yml`. Generate `/root/.ssh/id_ed25519_github_dnlab` if needed,
    install its public key in `/root/.ssh/authorized_keys` on the configured
    master target and every worker, and keep the private key only on the master.
@@ -230,7 +239,11 @@ LXC privileges, nesting and storage.
    `ssh -o BatchMode=yes root@<master.host> true` and repeat for every worker
    before starting installation. Also ensure the configured master and worker
    host keys are already present in `/root/.ssh/known_hosts`.
-3. Install a TLS certificate for the proxy. For a local test, a self-signed
+4. Generate `/root/.ssh/dnlab-gui.key` if needed and set
+   `ssh_gui_key: /root/.ssh/dnlab-gui.key` in `/etc/dnlab/paths.yml`; the GUI
+   uses this key for Web UI, console and log tunnels through jumphost
+   containers.
+5. Install a TLS certificate for the proxy. For a local test, a self-signed
    certificate under `/etc/ssl/dnlab` is acceptable; production should use a
    publicly trusted certificate.
 
@@ -243,13 +256,13 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
   -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 ```
 
-4. Copy `.env.example` to `.env`; set `POSTGRES_PASSWORD`,
+6. Copy `.env.example` to `.env`; set `POSTGRES_PASSWORD`,
    `DNLAB_PROXY_SERVER_NAME`, `DNLAB_PROXY_HTTPS_PORT`,
    `DNLAB_PROXY_TLS_DIR` and `DNLABGUI_ALLOWED_ORIGINS`.
-5. Public release images are readable without registry login. If the deployment
+7. Public release images are readable without registry login. If the deployment
    uses a private mirror, authenticate Docker to that registry first; Git SSH
    access to the repository is separate from Docker registry access.
-6. Pull the full published GHCR image set, then start the proxy dependency
+8. Pull the full published GHCR image set, then start the proxy dependency
    chain:
 
 ```bash
@@ -261,7 +274,7 @@ Use `--profile release-images` only for `pull`. It includes runtime images
 such as jumphost, DNS, RealNet and management-anchor helpers that are created
 later by lab orchestration; it is not part of the normal `up` command.
 
-7. Run `./smoke.sh` against the HTTPS URL. For a self-signed local test:
+9. Run `./smoke.sh` against the HTTPS URL. For a self-signed local test:
 
 ```bash
 COMPOSE_FILES=compose.yml \
@@ -270,7 +283,7 @@ DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
 
-8. Seed the first administrator:
+10. Seed the first administrator:
 
 ```bash
 DNLABGUI_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -278,7 +291,42 @@ DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD='<one-time-password>' \
 docker compose -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
 ```
 
-9. Run the HTTPS smoke check again.
+11. Run the HTTPS smoke check again.
+
+### Proxmox LXC Template Install
+
+Use this path when deploying from the published template documented in
+[dNLab Proxmox LXC Template](docs/proxmox-lxc-template.md). The template is
+pulled from GitHub Container Registry, preinstalls host prerequisites and runs
+an idempotent first-boot configurator.
+
+1. Prepare the Proxmox host and CT config as described in the template guide:
+   boot the Proxmox node with `loop.max_loop=64`, create a Proxmox LXC CT, and
+   apply the dNLab raw-device tuning to `/etc/pve/lxc/<CTID>.conf` with
+   `apply-proxmox-ct-tuning.sh <CTID>` or the documented manual block.
+2. Let `dnlab-firstboot.service` complete. It creates `.env`, generates a
+   local database password, writes `/etc/dnlab/hosts.yml` and
+   `/etc/dnlab/paths.yml`, generates the orchestration and GUI-jumphost SSH
+   keys, creates a local self-signed TLS certificate and starts the proxy.
+3. Run `dnlab-configure-env` inside the CT, or update `/opt/dnlab/.env`
+   manually, for the site hostname, public HTTPS port, certificate directory
+   and browser origin:
+   `DNLAB_PROXY_SERVER_NAME`, `DNLAB_PROXY_HTTPS_PORT`,
+   `DNLAB_PROXY_TLS_DIR` and `DNLABGUI_ALLOWED_ORIGINS`.
+4. Replace the generated self-signed certificate with a site certificate before
+   production use. Keep the certificate and key names aligned with
+   `DNLAB_PROXY_CERT_FILE` and `DNLAB_PROXY_CERT_KEY_FILE`; the guided
+   configurator can generate a new local self-signed certificate for test
+   deployments.
+5. Verify `/etc/dnlab/hosts.yml` and `/etc/dnlab/paths.yml`. The generated
+   `paths.yml` should include both
+   `ssh_key: /root/.ssh/id_ed25519_github_dnlab` and
+   `ssh_gui_key: /root/.ssh/dnlab-gui.key`.
+6. Optionally preload runtime helper images with
+   `docker compose -f compose.yml --profile release-images pull`; use that
+   profile for pulls only.
+7. Seed the first administrator and run `./smoke.sh` against the CT HTTPS URL
+   as described in the LXC template guide.
 
 ## TLS And Wildcard Web UI
 
