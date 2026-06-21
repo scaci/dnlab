@@ -6,9 +6,7 @@ Proxmox LXC template published on GitHub Container Registry.
 This artifact is built and supported for Proxmox LXC. Generic LXC runtimes are
 not a supported target for this template.
 
-You do not need to build the template yourself for a normal installation. The
-build scripts in `lxc/` are the public reproducible sources for the template and
-are mainly useful for release maintainers and auditors.
+You do not need to build the template yourself for a normal installation.
 
 ## Download From GHCR
 
@@ -18,8 +16,7 @@ The primary distribution channel for the LXC template is GHCR:
 ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0
 ```
 
-Install `oras` on your workstation or Proxmox host, authenticate if required,
-then pull the artifact:
+Install `oras` on your workstation or Proxmox host then pull the artifact:
 
 ```bash
 mkdir -p dnlab-lxc-0.1.0
@@ -35,6 +32,7 @@ dnlab-lxc-proxmox-0.1.0-amd64.tar.zst
 LXC-RELEASE-NOTES-0.1.0.md
 proxmox-dnlab-ct.conf
 apply-proxmox-ct-tuning.sh
+prepare-proxmox-ct.sh
 SHA256SUMS
 ```
 
@@ -95,25 +93,42 @@ swap: 2048
 rootfs: local-lvm:64
 net0: name=eth0,bridge=vmbr0,ip=dhcp
 features: nesting=1,keyctl=1
-unprivileged: 0
+unprivileged: 1
 ```
+
+If the CT must live on a tagged VLAN, set the site-specific VLAN tag on `net0`.
+This is optional and depends on your Proxmox host and switch design. In the
+Proxmox GUI this is the **VLAN Tag** field; in `/etc/pve/lxc/<CTID>.conf` it is
+stored as `tag=<vlan-id>`, for example:
+
+```text
+net0: name=eth0,bridge=vmbr0,tag=10,ip=dhcp
+```
+
+The bridge and physical switch path must carry the configured tagged VLAN. If
+no VLAN tag is configured, the CT uses the untagged network on the selected
+bridge.
 
 Use reliable local ext4 or xfs-backed storage for Docker data. Increase CPU,
 memory and disk for larger network labs or image-build workloads.
 
-### Proxmox CT Tuning
+### Prepare The CT Config
 
-Before first boot, add the dNLab raw-device tuning to the Proxmox CT config on
-the host, normally `/etc/pve/lxc/<CTID>.conf`. The pulled artifact includes
-`proxmox-dnlab-ct.conf` and an idempotent helper:
+Before first boot, run the dNLab Proxmox preparation helper on the Proxmox
+host. It validates the CT network, host loop-device setting and LXC features,
+then applies the raw-device tuning idempotently to
+`/etc/pve/lxc/<CTID>.conf`:
 
 ```bash
-chmod +x apply-proxmox-ct-tuning.sh
-./apply-proxmox-ct-tuning.sh <CTID>
+chmod +x prepare-proxmox-ct.sh apply-proxmox-ct-tuning.sh
+./prepare-proxmox-ct.sh <CTID>
 ```
 
 The helper creates a timestamped backup of the CT config and appends only
-missing lines. If you prefer to edit the CT config manually, add this block:
+missing raw-device tuning lines. It does not change `net0`, bridge, VLAN, MAC,
+firewall or IP settings.
+
+If you prefer to edit the CT config manually, add this block:
 
 ```text
 lxc.cgroup2.devices.allow: c 10:232 rwm
@@ -132,6 +147,75 @@ lxc.autodev: 1
 ```
 
 Restart the CT after changing `/etc/pve/lxc/<CTID>.conf`.
+
+### DHCP And VLAN Troubleshooting
+
+New templates configure `systemd-networkd` to bring `eth0` up with IPv4 DHCP.
+If a CT was created from an older template and `eth0` stays down or never gets
+an address, configure it inside the CT:
+
+```bash
+mkdir -p /etc/systemd/network
+cat >/etc/systemd/network/20-eth0.network <<'EOF'
+[Match]
+Name=eth0
+
+[Network]
+DHCP=ipv4
+IPv6AcceptRA=no
+
+[DHCPv4]
+UseDNS=true
+UseDomains=true
+EOF
+
+systemctl enable --now systemd-networkd
+ip link set eth0 up
+systemctl restart systemd-networkd
+```
+
+Then verify the link, address and DNS:
+
+```bash
+ip addr show eth0
+networkctl status eth0
+journalctl -u systemd-networkd -n 50 --no-pager
+resolvectl status || cat /etc/resolv.conf
+ping -c 3 1.1.1.1
+getent hosts ghcr.io
+```
+
+If `networkctl` reports `Failed to connect to system bus` when used through
+`pct enter`, rely on `ip addr show eth0`, `systemctl status systemd-networkd`
+and `journalctl -u systemd-networkd` instead.
+
+On the Proxmox host, verify the CT network line and VLAN-aware bridge state:
+
+```bash
+pct config <CTID>
+grep -A20 -n 'iface vmbr0' /etc/network/interfaces
+bridge vlan show
+```
+
+For a CT on a tagged VLAN, `pct config <CTID>` should include a network line
+like:
+
+```text
+net0: name=eth0,bridge=vmbr0,tag=10,ip=dhcp
+```
+
+To see whether DHCP requests leave the host bridge on a tagged VLAN, replace
+`10` with the configured VLAN ID and run this on the Proxmox host while
+rebooting the CT:
+
+```bash
+tcpdump -eni vmbr0 'vlan 10 and (port 67 or port 68)'
+pct reboot <CTID>
+```
+
+If DHCP discovers appear but no offers return, fix the upstream VLAN/DHCP path.
+If no discovers appear, fix the CT network configuration or `systemd-networkd`
+inside the CT.
 
 ## First Boot
 
@@ -152,10 +236,13 @@ The first-boot service runs `/usr/local/sbin/dnlab-firstboot`, which:
   tunnels;
 - creates the Compose network, discovers its gateway and writes
   `/etc/dnlab/hosts.yml`;
-- starts `docker compose -f compose.yml up -d dnlab-proxy`.
+- starts `docker compose -f compose.yml up -d dnlab-proxy`;
+- preloads the full release image set best-effort;
+- creates the first `admin` user with a generated password and stores it in
+  `/root/dnlab-first-admin.txt`.
 
-Docker Compose pulls the images needed by the startup path. To preload runtime
-helper images used later by lab orchestration, run this optional command inside
+The release image preload is best-effort: a temporary GHCR or network failure
+does not fail first boot. To retry the image preload manually, run this inside
 the CT:
 
 ```bash
@@ -171,6 +258,14 @@ https://<ct-ip>:8443/
 
 Because the default certificate is self-signed, your browser will show a
 certificate warning. Replace it with a site certificate before production use.
+
+Read the generated first-admin credentials as root:
+
+```bash
+cat /root/dnlab-first-admin.txt
+```
+
+The file is created with mode `0600` and is not stored in `.env`.
 
 ## Configure Site Settings
 
@@ -195,10 +290,17 @@ It prompts for:
 - `DNLAB_PROXY_CERT_FILE` and `DNLAB_PROXY_CERT_KEY_FILE`: certificate and key
   paths as seen inside the proxy container.
 
-If the configured certificate or key is missing under the TLS directory, the
-script can generate a new local self-signed certificate for the selected
-hostname. For production, install a publicly trusted certificate and point the
-certificate settings at that material instead.
+The TLS directory is a host path mounted into the proxy container as
+`/etc/ssl/dnlab`. Therefore `DNLAB_PROXY_CERT_FILE` and
+`DNLAB_PROXY_CERT_KEY_FILE` must be paths under `/etc/ssl/dnlab` as seen inside
+the proxy container. If the configured certificate or key is missing under the
+host TLS directory, the script can generate a new local self-signed certificate
+for the selected hostname.
+
+For production, install a publicly trusted certificate and point the certificate
+settings at that material instead. If per-device Web UI access uses wildcard
+hostnames, use a certificate that covers both the GUI hostname and
+`*.${DNLAB_PROXY_SERVER_NAME}`.
 
 The generated `/etc/dnlab/paths.yml` should match the bare metal shape and
 include both SSH keys:
@@ -208,6 +310,18 @@ ssh_key: /root/.ssh/id_ed25519_github_dnlab
 ssh_gui_key: /root/.ssh/dnlab-gui.key
 ```
 
+The corresponding public keys are:
+
+```bash
+cat /root/.ssh/id_ed25519_github_dnlab.pub
+cat /root/.ssh/dnlab-gui.key.pub
+```
+
+`ssh_key` is the master-to-worker orchestration key. On the generated
+single-node CT, its public key is added to `/root/.ssh/authorized_keys` for
+root-to-root access. `ssh_gui_key` is used by the GUI for per-lab jumphost Web
+UI, console and log tunnels.
+
 If you edit `.env` manually instead of using the guided script, recreate the GUI
 and proxy after changing hostname, origin, ports or TLS settings:
 
@@ -216,16 +330,12 @@ cd /opt/dnlab
 docker compose -f compose.yml up -d --force-recreate dnlab-gui dnlab-proxy
 ```
 
-## Create The First Admin
+## Sign In
 
-The template intentionally does not store an admin password. After first boot,
-run this inside the CT:
+After first boot, read the generated admin credentials:
 
 ```bash
-cd /opt/dnlab
-DNLABGUI_BOOTSTRAP_ADMIN_USERNAME=admin \
-DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD='<one-time-password>' \
-docker compose -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
+cat /root/dnlab-first-admin.txt
 ```
 
 Then open:
@@ -273,61 +383,3 @@ To rerun only the hostname, port and TLS prompts, use:
 ```bash
 sudo dnlab-configure-env
 ```
-
-## Maintainers
-
-The template archive is generated by dNLab maintainers and published as an OCI
-artifact on GHCR. Users should pull the artifact from GHCR instead of building
-it locally.
-
-Build from a clean, tagged distribution checkout on a Linux build host with root
-access, network access, `debootstrap`, `tar`, `zstd`, `curl` and `gpg`:
-
-```bash
-sudo lxc/build-proxmox-template.sh --version 0.1.0
-```
-
-The output files are written to `dist/lxc` by default:
-
-```text
-dnlab-lxc-proxmox-0.1.0-amd64.tar.zst
-LXC-RELEASE-NOTES-0.1.0.md
-proxmox-dnlab-ct.conf
-apply-proxmox-ct-tuning.sh
-SHA256SUMS
-```
-
-Publish the template as an OCI artifact after GHCR image publication,
-source-archive publication and release smoke validation have completed:
-
-```bash
-cd dist/lxc
-oras login ghcr.io
-oras push ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0 \
-  dnlab-lxc-proxmox-0.1.0-amd64.tar.zst:application/vnd.proxmox.lxc.template.v1.tar+zstd \
-  LXC-RELEASE-NOTES-0.1.0.md:text/markdown \
-  proxmox-dnlab-ct.conf:text/plain \
-  apply-proxmox-ct-tuning.sh:application/x-sh \
-  SHA256SUMS:text/plain
-```
-
-Use `0.1.0` as the GHCR artifact tag. Keep `v0.1.0` for the GitHub Release
-and git source tag only, otherwise GitHub Packages shows a second container
-version for the same release. Do not commit the generated template archive to
-the repository. If the files are also attached to the GitHub Release as a
-mirror, add the template checksum to the release `SHA256SUMS` without dropping
-existing source-archive checksum entries.
-
-The public reproducible sources for the LXC template are:
-
-- `lxc/build-proxmox-template.sh`
-- `lxc/apply-proxmox-ct-tuning.sh`
-- `lxc/dnlab-configure-env.sh`
-- `lxc/dnlab-firstboot.sh`
-- `lxc/dnlab-firstboot.service`
-- `lxc/proxmox-dnlab-ct.conf`
-- the tagged dNLab distribution files copied into `/opt/dnlab`
-
-The operational release helpers remain private. Their authoritative copies live
-under `/root/dnlab-dev-docs/scripts`; local copies under `/opt/dnlab/scripts`
-are ignored and must not be published.
