@@ -20,7 +20,7 @@ All contributions must comply with the Developer Certificate of Origin 1.1
 (`DCO`). The DCO is a lightweight certification that you have the right to
 submit your contribution under the project's license.
 
-The full DCO text is available in [DCO](DCO).
+The full DCO text is available in [DCO](../DCO).
 
 ## Sign-Off Requirement
 

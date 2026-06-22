@@ -1,7 +1,7 @@
 # License FAQ
 
 dNLab is licensed under the
-[GNU Affero General Public License v3.0 or later](LICENSE)
+[GNU Affero General Public License v3.0 or later](../LICENSE)
 (`AGPL-3.0-or-later`).
 
 This document clarifies what that means in practice, especially for

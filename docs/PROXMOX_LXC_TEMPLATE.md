@@ -271,7 +271,7 @@ The file is created with mode `0600` and is not stored in `.env`.
 
 The LXC template is already installed, but the generated instance still needs
 site-specific settings in `/opt/dnlab/.env`. This corresponds to the bare metal
-environment-file step in [ADMIN_GUIDE.md](../ADMIN_GUIDE.md), with the host
+environment-file step in [ADMIN_GUIDE.md](ADMIN_GUIDE.md), with the host
 prerequisites and first config files already prepared by first boot.
 
 Run the guided configurator inside the CT:

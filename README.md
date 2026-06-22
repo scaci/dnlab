@@ -6,8 +6,9 @@
 
 > Build network labs on one node or across many, orchestrated automatically and transparently.
 
-![Build](https://img.shields.io/badge/build-TODO-lightgrey)
+![Release](https://img.shields.io/badge/release-0.1.0-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)
+![Images](https://img.shields.io/badge/images-GHCR-blue)
 
 ## Overview
 
@@ -51,21 +52,21 @@ References:
 - Docker Engine 29 release notes: <https://docs.docker.com/engine/release-notes/29/>
 
 For Proxmox deployments, see
-[dNLab Proxmox LXC Template](docs/proxmox-lxc-template.md). Pull the ready-made
+[dNLab Proxmox LXC Template](docs/PROXMOX_LXC_TEMPLATE.md). Pull the ready-made
 LXC template from GitHub Container Registry; it keeps secrets, TLS material and
 site-specific host configuration out of the published archive.
 
 ### Suggested multinode reference design
 
 <p align="center">
-  <img src="infrastructure.svg" alt="Multinode Infrastructure" width="400">
+  <img src="docs/images/infrastructure.svg" alt="Multinode Infrastructure" width="400">
 </p>
 
 ## Docker Distribution Stack
 
 This repository contains the Docker distribution stack for dNLab. It uses GHCR
 image references and documents source availability for published images in
-[SOURCE.md](SOURCE.md).
+[SOURCE.md](docs/SOURCE.md).
 
 Public release packages are published as `ghcr.io/scaci/dnlab-*` container
 images and are linked to this public `scaci/dnlab` repository. The matching
@@ -88,9 +89,9 @@ The stack contains:
 
 Installation and operational steps live in the administrator documentation:
 
-- [ADMIN_GUIDE.md](ADMIN_GUIDE.md): bare metal installation, host
+- [ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md): bare metal installation, host
   configuration, TLS, first administrator setup, validation, backup and upgrade.
-- [dNLab Proxmox LXC Template](docs/proxmox-lxc-template.md): Proxmox LXC
+- [dNLab Proxmox LXC Template](docs/PROXMOX_LXC_TEMPLATE.md): Proxmox LXC
   deployment from the published template.
 
 In this distribution stack the GUI, multinode and lab-cleanup services default
@@ -98,17 +99,17 @@ to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_VERSION`.
 
 ## Documentation
 
-- [USER_GUIDE.md](USER_GUIDE.md): browser workflows for lab users.
-- [ADMIN_GUIDE.md](ADMIN_GUIDE.md): platform administration guide.
-- [CONTRIBUTING.md](CONTRIBUTING.md): contribution process and DCO
+- [USER_GUIDE.md](docs/USER_GUIDE.md): browser workflows for lab users.
+- [ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md): platform administration guide.
+- [CONTRIBUTING.md](docs/CONTRIBUTING.md): contribution process and DCO
   requirements.
-- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): third-party notices and
+- [THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md): third-party notices and
   redistribution notes.
 - [DCO](DCO): Developer Certificate of Origin text.
 - [LICENSE](LICENSE): AGPL-3.0-or-later license text.
-- [LICENSE_FAQ.md](LICENSE_FAQ.md): practical notes for on-premises use,
+- [LICENSE_FAQ.md](docs/LICENSE_FAQ.md): practical notes for on-premises use,
   AGPL obligations and commercial licensing.
-- [SOURCE.md](SOURCE.md): source availability policy for published dNLab
+- [SOURCE.md](docs/SOURCE.md): source availability policy for published dNLab
   container images.
 
 ## Key Features
@@ -152,10 +153,10 @@ flowchart TD
 
 ## Getting Started
 
-Administrators should begin with [ADMIN_GUIDE.md](ADMIN_GUIDE.md) for bare
-metal installs or [docs/proxmox-lxc-template.md](docs/proxmox-lxc-template.md)
+Administrators should begin with [ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) for bare
+metal installs or [PROXMOX_LXC_TEMPLATE.md](docs/PROXMOX_LXC_TEMPLATE.md)
 for Proxmox LXC template deployments. End users should start with
-[USER_GUIDE.md](USER_GUIDE.md) after an administrator has provisioned the
+[USER_GUIDE.md](docs/USER_GUIDE.md) after an administrator has provisioned the
 platform.
 
 ## Usage
@@ -177,7 +178,7 @@ before submitting a pull request.
 
 All contributions must be submitted under `AGPL-3.0-or-later` and certified
 with the Developer Certificate of Origin 1.1. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for details.
+[CONTRIBUTING.md](docs/CONTRIBUTING.md) for details.
 
 ## License
 
@@ -185,6 +186,6 @@ dNLab is licensed under the GNU Affero General Public License v3.0 or later
 (`AGPL-3.0-or-later`). See [LICENSE](LICENSE) for details.
 
 Internal on-premises use does not require publishing your modifications solely
-because of that internal use. See [LICENSE_FAQ.md](LICENSE_FAQ.md) for practical
-notes on AGPL obligations and commercial licensing. See [SOURCE.md](SOURCE.md)
+because of that internal use. See [LICENSE_FAQ.md](docs/LICENSE_FAQ.md) for practical
+notes on AGPL obligations and commercial licensing. See [SOURCE.md](docs/SOURCE.md)
 for the source availability policy for published dNLab container images.

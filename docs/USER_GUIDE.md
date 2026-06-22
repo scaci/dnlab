@@ -11,7 +11,7 @@ For platform setup and operations, see [ADMIN_GUIDE.md](ADMIN_GUIDE.md).
 Open the dNLab URL provided by your administrator. In a local default install
 this may be `https://localhost:8443` with a self-signed certificate; production deployments normally use a site hostname such as `https://dnlab.example.com`.
 
-![dNLab login page](docs/images/user-login.png)
+![dNLab login page](images/user-login.png)
 
 After login, dNLab opens the main application shell. Your account role controls
 which actions are available.
@@ -20,7 +20,7 @@ which actions are available.
 
 The Labs view is the main workspace for building and operating topologies.
 
-![Labs view](docs/images/user-labs-view.png)
+![Labs view](images/user-labs-view.png)
 
 The interface is organized around:
 
@@ -41,7 +41,7 @@ Use the new-lab workflow to create a lab with a display name and description.
 dNLab stores labs by UUID internally, so different users can use the same
 display name without colliding at runtime.
 
-![New lab dialog](docs/images/user-new-lab.png)
+![New lab dialog](images/user-new-lab.png)
 
 You can also open an existing lab from the lab list. Your role determines
 whether you can edit it or only view it.
@@ -52,13 +52,13 @@ Add devices from the catalog to the canvas. The catalog provides device labels,
 vendor grouping, icons, management interface defaults, resource defaults and
 known Web UI metadata.
 
-![Device catalog](docs/images/user-device-catalog.png)
+![Device catalog](images/user-device-catalog.png)
 
 Create links by selecting endpoints on two devices. dNLab stores links as
 logical `node:interface` pairs and translates the lab into Containerlab
 resources during deployment.
 
-![Link editor](docs/images/user-link-editor.png)
+![Link editor](images/user-link-editor.png)
 
 Use the properties panel to set the Docker image, management addresses, resource
 overrides, advanced node options and device-specific features. Management IPv4
@@ -79,13 +79,13 @@ the device kind, Docker image and interface choices before starting the lab.
 When you start a lab, dNLab asks the orchestrator for a pre-deploy plan. Review
 placement, image availability and warnings before confirming the start.
 
-![Lab start plan](docs/images/user-lab-start-plan.png)
+![Lab start plan](images/user-lab-start-plan.png)
 
 During deployment and teardown, the footer shows live events. A deployed lab has
 active dNLab runtime infrastructure; each virtual device also has its own state
 such as `running`, `stopped`, `starting`, `stopping` or `error`.
 
-![Running lab](docs/images/user-lab-running.png)
+![Running lab](images/user-lab-running.png)
 
 Use Stop or Destroy to tear down a lab when you are finished. Supported virtual
 devices can keep persistent disk state on the dNLab storage root and reuse it
@@ -98,7 +98,7 @@ needed.
 Open a device context menu to operate one virtual device without restarting the
 whole lab.
 
-![Node context menu](docs/images/user-node-context-menu.png)
+![Node context menu](images/user-node-context-menu.png)
 
 Common actions include:
 
@@ -118,7 +118,7 @@ Some device kinds expose HTTP or HTTPS management pages. dNLab opens these
 through a per-device tunnel and the public proxy, so your browser reaches the
 device without exposing internal Docker networks directly.
 
-![Device Web UI](docs/images/user-device-webui.png)
+![Device Web UI](images/user-device-webui.png)
 
 In production, administrators normally configure wildcard DNS and certificates
 so hostnames under `*.dnlab.example.com` can route to device Web UIs.
@@ -128,7 +128,7 @@ so hostnames under `*.dnlab.example.com` can route to device Web UIs.
 The Console and Logs tabs let you inspect device runtime behavior from the
 browser.
 
-![Console and logs](docs/images/user-console-logs.png)
+![Console and logs](images/user-console-logs.png)
 
 Console access is resolved through the dNLab runtime report and relay for the
 host that runs the virtual device. Some virtual network devices take several
@@ -140,7 +140,7 @@ When capture is available for a link or interface, use the context menu to
 launch or stop a capture session. dNLab validates the capture target, applies
 controlled packet filters and streams packet data through a short-lived token.
 
-![Packet capture](docs/images/user-capture.png)
+![Packet capture](images/user-capture.png)
 
 Your administrator may provide a desktop handler for opening captures in
 Wireshark.
@@ -150,7 +150,7 @@ Wireshark.
 Follow the Rabbit is a passive traffic-observation workflow. It correlates a
 flow seen in captures and visualizes the oriented path on the canvas.
 
-![Follow the Rabbit](docs/images/user-follow-rabbit.png)
+![Follow the Rabbit](images/user-follow-rabbit.png)
 
 This feature observes existing traffic; it does not generate traffic for you.
 
@@ -179,13 +179,13 @@ RealNet has two operating modes:
 The following diagram shows the BGP mode topology. It does not describe NAT
 mode.
 
-![RealNet BGP topology](docs/images/realnet_topology.svg)
+![RealNet BGP topology](images/realnet_topology.svg)
 
 In BGP mode, RealNet can also connect different labs to each other, including
 labs owned by different users. Select the RealNet node and use its properties to
 choose which labs this lab is allowed to communicate with.
 
-![RealNet properties](docs/images/user-realnet-properties.png)
+![RealNet properties](images/user-realnet-properties.png)
 
 Communication must be enabled from both sides: each lab must allow the other lab
 from the RealNet node properties before routes are exchanged between them. dNLab

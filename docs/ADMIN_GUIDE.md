@@ -296,7 +296,7 @@ docker compose -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
 ### Proxmox LXC Template Install
 
 Use this path when deploying from the published template documented in
-[dNLab Proxmox LXC Template](docs/proxmox-lxc-template.md). The template is
+[dNLab Proxmox LXC Template](PROXMOX_LXC_TEMPLATE.md). The template is
 pulled from GitHub Container Registry, preinstalls host prerequisites and runs
 an idempotent first-boot configurator.
 
@@ -373,7 +373,7 @@ The default authentication backend is `local_db`, with Argon2id password hashes
 stored in PostgreSQL. Other backends may be configured for reverse-proxy basic
 auth, LDAP or OIDC depending on deployment policy.
 
-![Users and roles](docs/images/admin-users-roles.png)
+![Users and roles](images/admin-users-roles.png)
 
 Roles:
 
@@ -397,13 +397,13 @@ Operational rules:
 Administrators can manage shared configuration for hosts, paths and device
 catalog metadata from the Admin area.
 
-![Hosts and paths configuration](docs/images/admin-config-hosts-paths.png)
+![Hosts and paths configuration](images/admin-config-hosts-paths.png)
 
 The device catalog controls how the GUI displays device kinds, recognizes
 Docker images, chooses icons, maps GUI kinds to Containerlab kinds, injects
 defaults and exposes known Web UI metadata.
 
-![Device catalog admin](docs/images/admin-device-catalog.png)
+![Device catalog admin](images/admin-device-catalog.png)
 
 Treat catalog changes as platform changes: validate them with a small lab before
 making them broadly available.
@@ -440,7 +440,7 @@ RealNet models connectivity from labs to external networks. NAT mode is simple
 egress; BGP mode integrates with administrator-managed route reflector
 configuration.
 
-![RealNet BGP admin](docs/images/admin-realnet-bgp.png)
+![RealNet BGP admin](images/admin-realnet-bgp.png)
 
 These global settings also back the user-facing RealNet BGP lab-to-lab
 communication feature. Users can select allowed peer labs from the RealNet node
@@ -487,7 +487,7 @@ streaming. Build metadata and logs are stored under
 Build contexts are read from `${DNLAB_VRNETLAB_DIR:-/opt/vrnetlab}`, which
 must be the `dnlab` branch of `https://github.com/scaci/vrnetlab.git`.
 
-![Image build admin](docs/images/admin-image-build.png)
+![Image build admin](images/admin-image-build.png)
 
 `dnlab-image-sync` tracks image availability across nodes. After adding or
 importing virtual device images, verify image discovery and image sync before
@@ -633,50 +633,4 @@ DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
 
-## Release Engineering
 
-The authoritative release helper sources live in the private operational
-repository under `/root/dnlab-dev-docs/scripts`. Local copies under
-`/opt/dnlab/scripts` are ignored by the public repository and must be synced
-from the private source before a release. Do not publish those local copies.
-
-For a versioned release, follow this order:
-
-1. Sync the private helpers into `/opt/dnlab/scripts`.
-2. Run `release_ghcr.py` to prepare distribution files and local `vX.Y.Z` tags.
-3. Push the tags and verify GitHub Actions and GHCR packages.
-4. Run `release_sources.py` to upload the AGPL source archives and
-   `SHA256SUMS` to `scaci/dnlab@vX.Y.Z`.
-5. Run preflight and smoke checks against the published images.
-6. Build the Proxmox LXC template from the tagged distribution checkout with
-   `lxc/build-proxmox-template.sh --version X.Y.Z`.
-7. Validate the template on Proxmox, then publish it as an OCI artifact with
-   `oras push ghcr.io/scaci/dnlab-lxc-proxmox:X.Y.Z`. Include the `.tar.zst`,
-   `LXC-RELEASE-NOTES-X.Y.Z.md` and `SHA256SUMS`, and add the optional
-   `vX.Y.Z` tag.
-8. Pull the GHCR artifact into a clean directory, verify `SHA256SUMS`, and
-   repeat the Proxmox import smoke before announcing the LXC template.
-
-If an internal helper is added for LXC publication, its authoritative source
-belongs in `/root/dnlab-dev-docs/scripts`; any `/opt/dnlab/scripts` copy remains
-local operational state.
-
-## Troubleshooting
-
-- Login fails: check auth backend configuration, account active state and
-  database migrations.
-- Admin page is hidden: confirm the user has role `admin`.
-- A user cannot create labs: confirm the role is not `rookie`.
-- A second assistant cannot be created: dNLab allows only one local-db
-  `assistant`.
-- dNLab helper images are missing: run
-  `docker compose --profile release-images pull`, then check image sync for
-  worker nodes.
-- Virtual device images are missing: check Docker image discovery, image-build
-  jobs and image sync.
-- Lab start fails: inspect the pre-deploy plan, service health and
-  `dnlab-multinode` logs.
-- Device Web UI fails: check lab deployment state, device state, wildcard DNS,
-  TLS certificate coverage and proxy configuration.
-- Console or logs are empty: confirm the device is running and allow enough
-  boot time for virtual network appliances.
