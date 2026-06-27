@@ -1,11 +1,11 @@
 services:
-  dnlab-proxy:
+  proxy:
     security_opt:
       - no-new-privileges:true
     tmpfs:
       - /tmp
 
-  dnlab-gui:
+  gui:
     read_only: true
     cap_drop:
       - ALL
@@ -15,7 +15,7 @@ services:
       - /tmp
       - /run
 
-  dnlab-auth-seed:
+  auth-seed:
     read_only: true
     cap_drop:
       - ALL
@@ -25,18 +25,18 @@ services:
       - /tmp
       - /run
 
-  dnlab-auth-db:
+  auth-db:
     security_opt:
       - no-new-privileges:true
 
-  dnlab-image-build:
+  image-build:
     security_opt:
       - no-new-privileges:true
 
-  dnlab-lab-cleanup:
+  lab-cleanup:
     security_opt:
       - no-new-privileges:true
 
-  dnlab-image-sync:
+  image-sync:
     security_opt:
       - no-new-privileges:true

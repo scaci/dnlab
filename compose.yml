@@ -1,8 +1,9 @@
+name: dnlab
 services:
-  dnlab-proxy:
+  proxy:
     image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-proxy:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     depends_on:
-      dnlab-gui:
+      gui:
         condition: service_healthy
     environment:
       DNLAB_PROXY_MODE: tls
@@ -18,7 +19,7 @@ services:
       - ${DNLAB_PROXY_TLS_DIR:-/etc/ssl/dnlab}:/etc/ssl/dnlab:ro
       - ${DNLAB_PROXY_ACME_DIR:-/var/www/acme-challenge}:/var/www/acme-challenge
     networks:
-      - dnlab-internal
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/ >/dev/null"]
       interval: 10s
@@ -27,28 +28,28 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  dnlab-gui:
+  gui:
     image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     command: ["sh", "-c", "alembic upgrade head && python run.py"]
     depends_on:
-      dnlab-auth-db:
+      auth-db:
         condition: service_healthy
-      dnlab-multinode:
+      multinode:
         condition: service_healthy
-      dnlab-image-build:
+      image-build:
         condition: service_healthy
     environment:
       DNLABGUI_HOST: 0.0.0.0
       DNLABGUI_PORT: "8080"
-      DNLAB_MULTINODE_API_URL: http://dnlab-multinode:8081
-      DNLAB_IMAGE_BUILD_API_URL: http://dnlab-image-build:8082
+      DNLAB_MULTINODE_API_URL: http://multinode:8081
+      DNLAB_IMAGE_BUILD_API_URL: http://image-build:8082
       DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
       DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}
       DNLAB_MULTINODE_HOSTS: /etc/dnlab/hosts.yml
       TOPOLOGIES_DIR: ${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}
       DNLABGUI_ALLOWED_ORIGINS: ${DNLABGUI_ALLOWED_ORIGINS:-https://${DNLAB_PROXY_SERVER_NAME:?set DNLAB_PROXY_SERVER_NAME}}
       DNLABGUI_WEBUI_HOST_SUFFIX: ${DNLAB_PROXY_SERVER_NAME:?set DNLAB_PROXY_SERVER_NAME}
-      DNLABGUI_AUTH_DATABASE_URL: ${DNLABGUI_AUTH_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-dnlab_gui}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@dnlab-auth-db:5432/${POSTGRES_DB:-dnlab_auth}}
+      DNLABGUI_AUTH_DATABASE_URL: ${DNLABGUI_AUTH_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-dnlab_gui}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@auth-db:5432/${POSTGRES_DB:-dnlab_auth}}
     volumes:
       - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
       - ${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}:${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}
@@ -61,7 +62,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - dnlab-internal
+      internal:
+        aliases:
+          - dnlab-gui
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/', timeout=3).read()\""]
       interval: 10s
@@ -70,15 +73,15 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  dnlab-auth-seed:
+  auth-seed:
     image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - seed-admin
     depends_on:
-      dnlab-auth-db:
+      auth-db:
         condition: service_healthy
     environment:
-      DNLABGUI_AUTH_DATABASE_URL: ${DNLABGUI_AUTH_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-dnlab_gui}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@dnlab-auth-db:5432/${POSTGRES_DB:-dnlab_auth}}
+      DNLABGUI_AUTH_DATABASE_URL: ${DNLABGUI_AUTH_DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-dnlab_gui}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@auth-db:5432/${POSTGRES_DB:-dnlab_auth}}
       DNLABGUI_BOOTSTRAP_ADMIN_USERNAME: ${DNLABGUI_BOOTSTRAP_ADMIN_USERNAME:-}
       DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD: ${DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD:-}
     volumes:
@@ -97,10 +100,10 @@ services:
           --username "$$DNLABGUI_BOOTSTRAP_ADMIN_USERNAME" \
           --password "$$DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD"
     networks:
-      - dnlab-internal
+      - internal
     restart: "no"
 
-  dnlab-auth-db:
+  auth-db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-dnlab_auth}
@@ -108,9 +111,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - dnlab-auth-pgdata:/var/lib/postgresql/data
+      - auth-pgdata:/var/lib/postgresql/data
     networks:
-      - dnlab-internal
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-dnlab_gui} -d $${POSTGRES_DB:-dnlab_auth}"]
       interval: 10s
@@ -119,13 +122,13 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  dnlab-multinode:
+  multinode:
     image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     privileged: true
     environment:
       DNLAB_MULTINODE_API_HOST: 0.0.0.0
       DNLAB_MULTINODE_API_PORT: "8081"
-      DNLAB_IMAGE_SYNC_API_URL: http://dnlab-image-sync:8083
+      DNLAB_IMAGE_SYNC_API_URL: http://image-sync:8083
       DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
       DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}
     volumes:
@@ -138,7 +141,7 @@ services:
       - ${DNLAB_TMP_DIR:-/tmp}:${DNLAB_TMP_DIR:-/tmp}
       - ${DNLAB_CONTAINERLAB_BIN:-/usr/bin/containerlab}:/usr/bin/containerlab:ro
     networks:
-      - dnlab-internal
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3).read()\""]
       interval: 10s
@@ -147,11 +150,11 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  dnlab-image-sync:
+  image-sync:
     image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     command: ["dnlab-image-sync", "start"]
     depends_on:
-      - dnlab-multinode
+      - multinode
     environment:
       DNLAB_MULTINODE_HOSTS: /etc/dnlab/hosts.yml
       DNLAB_IMAGE_SYNC_API_HOST: 0.0.0.0
@@ -162,9 +165,9 @@ services:
       - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
       - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - dnlab-image-sync-state:/var/lib/dnlab-image-sync
+      - image-sync-state:/var/lib/dnlab-image-sync
     networks:
-      - dnlab-internal
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3).read()\""]
       interval: 10s
@@ -173,10 +176,10 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  dnlab-lab-cleanup:
+  lab-cleanup:
     image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-lab-cleanup:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     depends_on:
-      - dnlab-multinode
+      - multinode
     volumes:
       - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
       - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
@@ -188,7 +191,7 @@ services:
       - ${DNLAB_TMP_DIR:-/tmp}:${DNLAB_TMP_DIR:-/tmp}
       - ${DNLAB_CONTAINERLAB_BIN:-/usr/bin/containerlab}:/usr/bin/containerlab:ro
     networks:
-      - dnlab-internal
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "dnlab-lab-cleanup status --json >/dev/null"]
       interval: 30s
@@ -197,7 +200,7 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  dnlab-image-build:
+  image-build:
     image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-image-build:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     environment:
       DNLAB_IMAGE_BUILD_API_HOST: 0.0.0.0
@@ -207,7 +210,7 @@ services:
       - ${DNLAB_IMAGE_BUILD_WORKSPACE:-/var/lib/dnlab-image-build}:/var/lib/dnlab-image-build
       - ${DNLAB_VRNETLAB_DIR:-/opt/vrnetlab}:/opt/vrnetlab
     networks:
-      - dnlab-internal
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3).read()\""]
       interval: 10s
@@ -216,7 +219,7 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  dnlab-release-jumphost-image:
+  release-jumphost-image:
     image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}jumphost:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
@@ -224,7 +227,7 @@ services:
     network_mode: "none"
     restart: "no"
 
-  dnlab-release-dns-image:
+  release-dns-image:
     image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}dns:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
@@ -232,7 +235,7 @@ services:
     network_mode: "none"
     restart: "no"
 
-  dnlab-release-runtime-relay-image:
+  release-runtime-relay-image:
     image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}runtime-relay:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
@@ -240,7 +243,7 @@ services:
     network_mode: "none"
     restart: "no"
 
-  dnlab-release-realnet-router-image:
+  release-realnet-router-image:
     image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}realnet-router:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
@@ -248,7 +251,7 @@ services:
     network_mode: "none"
     restart: "no"
 
-  dnlab-release-realnet-rr-image:
+  release-realnet-rr-image:
     image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}realnet-rr:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
@@ -256,7 +259,7 @@ services:
     network_mode: "none"
     restart: "no"
 
-  dnlab-release-mgmt-anchor-image:
+  release-mgmt-anchor-image:
     image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}mgmt-anchor:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
@@ -265,8 +268,8 @@ services:
     restart: "no"
 
 networks:
-  dnlab-internal:
+  internal:
 
 volumes:
-  dnlab-auth-pgdata:
-  dnlab-image-sync-state:
+  auth-pgdata:
+  image-sync-state:

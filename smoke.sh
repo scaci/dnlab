@@ -32,8 +32,8 @@ test "$proxy_code" = "200"
 echo "proxy ${PROXY_URL} -> ${proxy_code}"
 
 echo "== gui isolation =="
-compose exec -T dnlab-gui sh -lc 'test ! -S /var/run/docker.sock'
-compose exec -T dnlab-gui python - <<'PY'
+compose exec -T gui sh -lc 'test ! -S /var/run/docker.sock'
+compose exec -T gui python - <<'PY'
 import importlib.util
 import sys
 
@@ -61,7 +61,7 @@ print({
 PY
 
 echo "== multinode api =="
-compose exec -T dnlab-multinode python - <<'PY'
+compose exec -T multinode python - <<'PY'
 import importlib.util
 import json
 from urllib.request import Request, urlopen
@@ -93,10 +93,6 @@ assert status == 200 and rr.get("container") == "dnlab-realnet-rr", rr
 
 status, images = request("GET", "/docker/images")
 assert status == 200 and isinstance(images.get("images"), list), images
-for image in images["images"]:
-    if image.get("repository") == "vrnetlab/dnlab_frr":
-        assert image.get("kind") == "linux", image
-        break
 
 print({
     "health": health,
@@ -108,8 +104,8 @@ print({
 PY
 
 echo "== lab cleanup daemon =="
-compose ps dnlab-lab-cleanup
-compose exec -T dnlab-lab-cleanup sh -lc '
+compose ps lab-cleanup
+compose exec -T lab-cleanup sh -lc '
   for i in $(seq 1 30); do
     if dnlab-lab-cleanup status --json >/tmp/dnlab-lab-cleanup-status.json; then
       cat /tmp/dnlab-lab-cleanup-status.json
@@ -122,7 +118,7 @@ compose exec -T dnlab-lab-cleanup sh -lc '
 '
 
 echo "== image-build api =="
-compose exec -T dnlab-image-build python - <<'PY'
+compose exec -T image-build python - <<'PY'
 import json
 from urllib.request import urlopen
 

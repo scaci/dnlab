@@ -47,10 +47,10 @@ if [ ! -f "${TLS_DIR}/dnlab-gui.crt" ] || [ ! -f "${TLS_DIR}/dnlab-gui.key" ]; t
 fi
 
 echo "== fresh install stack =="
-compose up -d dnlab-proxy
+compose up -d proxy
 
 echo "== empty auth DB =="
-compose exec -T dnlab-auth-db sh -lc \
+compose exec -T auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from users;"' \
   | tr -d '[:space:]' \
   | grep -qx '0'
@@ -67,7 +67,7 @@ DNLAB_TOPOLOGIES_DIR="$TOPO_DIR" \
 DNLAB_LOG_DIR_GUI="$LOG_GUI_DIR" \
 DNLAB_LOG_DIR_MULTINODE="$LOG_MULTINODE_DIR" \
 DNLAB_IMAGE_BUILD_WORKSPACE="$IMAGE_BUILD_WORKSPACE" \
-docker compose -p "$PROJECT" -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
+docker compose -p "$PROJECT" -f compose.yml --profile seed-admin run --rm auth-seed
 
 echo "== login =="
 login_code="$(curl -k -sS -o /tmp/dnlab-preflight-login.json -w '%{http_code}' \
@@ -86,15 +86,15 @@ print(data)
 PY
 
 echo "== smoke =="
-docker compose -p "$PROJECT" -f compose.yml exec -T dnlab-gui python - <<'PY'
+docker compose -p "$PROJECT" -f compose.yml exec -T gui python - <<'PY'
 import importlib.util
 assert importlib.util.find_spec("dnlab_multinode") is None
 print("gui-no-dnlab-multinode-package")
 PY
 
-docker compose -p "$PROJECT" -f compose.yml exec -T dnlab-gui sh -lc 'test ! -S /var/run/docker.sock && echo no-docker-socket'
+docker compose -p "$PROJECT" -f compose.yml exec -T gui sh -lc 'test ! -S /var/run/docker.sock && echo no-docker-socket'
 
-docker compose -p "$PROJECT" -f compose.yml exec -T dnlab-image-build python - <<'PY'
+docker compose -p "$PROJECT" -f compose.yml exec -T image-build python - <<'PY'
 import json
 from urllib.request import urlopen
 with urlopen("http://127.0.0.1:8082/health", timeout=10) as response:

@@ -236,7 +236,7 @@ The first-boot service runs `/usr/local/sbin/dnlab-firstboot`, which:
   tunnels;
 - creates the Compose network, discovers its gateway and writes
   `/etc/dnlab/hosts.yml`;
-- starts `docker compose -f compose.yml up -d dnlab-proxy`;
+- starts `docker compose -f compose.yml up -d proxy`;
 - preloads the full release image set best-effort;
 - creates the first `admin` user with a generated password and stores it in
   `/root/dnlab-first-admin.txt`.
@@ -327,7 +327,7 @@ and proxy after changing hostname, origin, ports or TLS settings:
 
 ```bash
 cd /opt/dnlab
-docker compose -f compose.yml up -d --force-recreate dnlab-gui dnlab-proxy
+docker compose -f compose.yml up -d --force-recreate gui proxy
 ```
 
 ## Sign In

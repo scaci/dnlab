@@ -8,20 +8,23 @@ For end-user workflows in the browser, see [USER_GUIDE.md](USER_GUIDE.md).
 
 ## Architecture
 
-dNLab exposes one public entrypoint, `dnlab-proxy`. The GUI and backend
-services stay on the internal Compose network.
+dNLab exposes one public Compose service, `proxy`, on the host. The GUI and
+backend services stay on the internal Compose network.
 
-Main services:
+Main Compose services:
 
-- `dnlab-proxy`: Apache reverse proxy for HTTP, TLS, WebSocket and per-device
+- `proxy`: Apache reverse proxy for HTTP, TLS, WebSocket and per-device
   Web UI access.
-- `dnlab-gui`: FastAPI GUI and browser application.
-- `dnlab-multinode`: internal orchestration API for Containerlab, workers and
+- `gui`: FastAPI GUI and browser application.
+- `multinode`: internal orchestration API for Containerlab, workers and
   runtime state.
-- `dnlab-image-sync`: internal image synchronization helper.
-- `dnlab-lab-cleanup`: periodic reconciler for stale runtime artifacts.
-- `dnlab-image-build`: internal API for image-build jobs and logs.
-- `dnlab-auth-db`: PostgreSQL database for local authentication.
+- `image-sync`: internal image synchronization helper.
+- `lab-cleanup`: periodic reconciler for stale runtime artifacts.
+- `image-build`: internal API for image-build jobs and logs.
+- `auth-db`: PostgreSQL database for local authentication.
+
+Images, binaries, log directories, TLS files and source artifacts keep their
+`dnlab-*` product names.
 
 The GUI container does not mount `/var/run/docker.sock`; Docker discovery and
 orchestration flow through the internal services.
@@ -121,7 +124,7 @@ sudo mkdir -p /etc/dnlab /root/dnlab-topologies \
 ```
 
 `/opt/vrnetlab` must contain the dNLab vrnetlab tree used by
-`dnlab-image-build`. For a fresh host:
+the `image-build` service. For a fresh host:
 
 ```bash
 if [ ! -d /opt/vrnetlab/.git ]; then
@@ -153,7 +156,7 @@ Install `/root/.ssh/id_ed25519_github_dnlab.pub` in
 the configured master target for master-to-master access. For remote workers,
 `ssh-copy-id -i /root/.ssh/id_ed25519_github_dnlab.pub root@<worker-host>` is
 acceptable when available. For single-node installs, `master.host` should be
-reachable from `dnlab-multinode` over SSH. Because `/root/.ssh` is mounted
+reachable from the `multinode` service over SSH. Because `/root/.ssh` is mounted
 read-only inside the containers, add the configured master and worker host keys
 to `/root/.ssh/known_hosts` on the host before starting the stack. Some RealNet
 paths may still look for
@@ -229,7 +232,7 @@ Linux hosts. Bare metal remains the reference deployment model.
    gateway, and leave `workers` empty. For a multi-node install, declare the
    dedicated dataplane interface alias for the master and every worker.
 2. Install or verify the dNLab vrnetlab tree at `/opt/vrnetlab`; it is used by
-   `dnlab-image-build` and should be the `dnlab` branch of
+   the `image-build` service and should be the `dnlab` branch of
    `https://github.com/scaci/vrnetlab.git`.
 3. Configure SSH key-based access from the master to every host in
    `hosts.yml`. Generate `/root/.ssh/id_ed25519_github_dnlab` if needed,
@@ -267,7 +270,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
 
 ```bash
 docker compose -f compose.yml --profile release-images pull
-docker compose -f compose.yml up -d dnlab-proxy
+docker compose -f compose.yml up -d proxy
 ```
 
 Use `--profile release-images` only for `pull`. It includes runtime images
@@ -288,7 +291,7 @@ DNLAB_SMOKE_CURL_INSECURE=1 \
 ```bash
 DNLABGUI_BOOTSTRAP_ADMIN_USERNAME=admin \
 DNLABGUI_BOOTSTRAP_ADMIN_PASSWORD='<one-time-password>' \
-docker compose -f compose.yml --profile seed-admin run --rm dnlab-auth-seed
+docker compose -f compose.yml --profile seed-admin run --rm auth-seed
 ```
 
 11. Run the HTTPS smoke check again.
@@ -338,7 +341,7 @@ override.
 DNLAB_PROXY_SERVER_NAME=dnlab.example.com \
 DNLABGUI_ALLOWED_ORIGINS=https://dnlab.example.com \
 DNLAB_PROXY_TLS_DIR=/etc/ssl/dnlab \
-docker compose -f compose.yml up -d --force-recreate dnlab-gui dnlab-proxy
+docker compose -f compose.yml up -d --force-recreate gui proxy
 ```
 
 `DNLAB_PROXY_SERVER_NAME` is the single public-host setting for the proxy and
@@ -350,7 +353,7 @@ and `DNLAB_PROXY_CERT_KEY_FILE`.
 Verify the proxy after TLS changes:
 
 ```bash
-docker compose -f compose.yml exec -T dnlab-proxy apache2ctl configtest
+docker compose -f compose.yml exec -T proxy apache2ctl configtest
 curl -kI https://dnlab.example.com/
 ```
 
@@ -481,7 +484,7 @@ infrastructure:
 
 ## Image Build And Image Sync
 
-`dnlab-image-build` provides an internal API for upload, build jobs and job log
+`image-build` provides an internal API for upload, build jobs and job log
 streaming. Build metadata and logs are stored under
 `${DNLAB_IMAGE_BUILD_WORKSPACE:-/var/lib/dnlab-image-build}`.
 Build contexts are read from `${DNLAB_VRNETLAB_DIR:-/opt/vrnetlab}`, which
@@ -489,7 +492,7 @@ must be the `dnlab` branch of `https://github.com/scaci/vrnetlab.git`.
 
 ![Image build admin](images/admin-image-build.png)
 
-`dnlab-image-sync` tracks image availability across nodes. After adding or
+`image-sync` tracks image availability across nodes. After adding or
 importing virtual device images, verify image discovery and image sync before
 asking users to start labs that depend on those images. dNLab release helper
 images are not built locally during installation; preload them with:
@@ -500,7 +503,7 @@ docker compose -f compose.yml --profile release-images pull
 
 ## Lab Cleanup Reconciler
 
-`dnlab-lab-cleanup` periodically reconciles stale lab artifacts. During first
+`lab-cleanup` periodically reconciles stale lab artifacts. During first
 rollout, keep cleanup in dry-run mode in `/etc/dnlab/hosts.yml`:
 
 ```yaml
@@ -517,10 +520,10 @@ ready for automatic cleanup.
 Manual checks:
 
 ```bash
-docker compose -f compose.yml exec dnlab-lab-cleanup \
+docker compose -f compose.yml exec lab-cleanup \
   dnlab-lab-cleanup sync --dry-run --json
 
-docker compose -f compose.yml exec dnlab-lab-cleanup \
+docker compose -f compose.yml exec lab-cleanup \
   dnlab-lab-cleanup sync --execute --json
 ```
 
@@ -533,14 +536,14 @@ production-like stack:
 docker compose \
   -f compose.yml \
   -f compose.hardened.yml \
-  up -d --force-recreate dnlab-gui dnlab-proxy
+  up -d --force-recreate gui proxy
 ```
 
 The hardening override makes the GUI filesystem read-only, drops GUI Linux
 capabilities, adds tmpfs mounts for transient paths, and applies
-`no-new-privileges` to GUI, proxy, auth DB and image-build. `dnlab-multinode`
+`no-new-privileges` to GUI, proxy, auth DB and image-build. `multinode`
 remains the privileged orchestration boundary for Docker, ContainerLab and host
-operations. `dnlab-image-build` keeps the Docker socket because image builds
+operations. `image-build` keeps the Docker socket because image builds
 require Docker and the service remains internal-only.
 
 Run smoke with the same Compose file set:
@@ -561,9 +564,8 @@ Specifically, smoke verifies that:
 - the GUI container has no Docker socket;
 - the GUI image does not install or import `dnlab-multinode`;
 - RealNet RR status, `hosts.yml` validation and image discovery go through
-  `dnlab-multinode`;
-- `dnlab-lab-cleanup` is running and has published a state snapshot;
-- `vrnetlab/dnlab_frr` resolves to ContainerLab kind `linux`.
+  `multinode`;
+- `lab-cleanup` is running and has published a state snapshot;
 
 Run `./preflight.sh` for a fresh-install validation in an isolated Compose
 project with an empty database, first-admin bootstrap and login through the
@@ -578,7 +580,7 @@ Before upgrading, back up the auth DB:
 
 ```bash
 mkdir -p auth-db-dumps
-docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
+docker compose -f compose.yml exec -T auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' \
   > auth-db-dumps/dnlab_auth_before_upgrade.sql
 ```
@@ -589,7 +591,7 @@ services and proxy:
 ```bash
 grep '^DNLAB_VERSION=0.1.0$' .env
 docker compose -f compose.yml --profile release-images pull
-docker compose -f compose.yml up -d --force-recreate dnlab-multinode dnlab-lab-cleanup dnlab-image-build dnlab-gui dnlab-proxy
+docker compose -f compose.yml up -d --force-recreate multinode lab-cleanup image-build gui proxy
 ```
 
 Run guardrails:
@@ -620,13 +622,13 @@ restoring, reset the target schema, load the dump, restart through the proxy and
 run smoke checks.
 
 ```bash
-docker compose -f compose.yml stop dnlab-gui
-docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
+docker compose -f compose.yml stop gui
+docker compose -f compose.yml exec -T auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema public cascade; create schema public;"'
-docker compose -f compose.yml exec -T dnlab-auth-db sh -lc \
+docker compose -f compose.yml exec -T auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
   < auth-db-dumps/dnlab_auth_restore.sql
-docker compose -f compose.yml up -d dnlab-proxy
+docker compose -f compose.yml up -d proxy
 COMPOSE_FILES=compose.yml \
 DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
 DNLAB_SMOKE_CURL_INSECURE=1 \

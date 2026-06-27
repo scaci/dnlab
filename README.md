@@ -75,15 +75,19 @@ AGPL source archives are attached to the corresponding GitHub Release.
 Current release: `0.1.0`. The Compose stack requires `DNLAB_VERSION=0.1.0`
 in `.env`; this selects the published GHCR images for the release.
 
-The stack contains:
+The stack contains these Compose services:
 
-- `dnlab-proxy`: Apache reverse proxy, exposed on the host.
-- `dnlab-gui`: FastAPI GUI, internal only.
-- `dnlab-multinode`: internal API for orchestration.
-- `dnlab-lab-cleanup`: periodic stale-artifact reconciler, built from a
+- `proxy`: Apache reverse proxy, exposed on the host.
+- `gui`: FastAPI GUI, internal only.
+- `multinode`: internal API for orchestration.
+- `lab-cleanup`: periodic stale-artifact reconciler, built from a
   dedicated slim image (`Dockerfile.cleanup`) and operating entirely over SSH.
-- `dnlab-image-build`: internal API for image-build jobs and log streaming.
-- `dnlab-auth-db`: support Postgres service for GUI local-db auth.
+- `image-build`: internal API for image-build jobs and log streaming.
+- `image-sync`: internal image synchronization helper.
+- `auth-db`: support Postgres service for GUI local-db auth.
+
+Images, binaries, log directories, TLS files and source artifacts keep their
+`dnlab-*` product names.
 
 ## Deployment
 
