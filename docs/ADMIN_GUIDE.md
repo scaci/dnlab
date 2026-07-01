@@ -220,6 +220,70 @@ single seed command.
 
 ## First Install
 
+### Install Docker And Containerlab Prerequisites
+
+Use this prerequisite path for manual bare-metal installations and for worker
+hosts prepared outside the Proxmox LXC template. The published Proxmox LXC
+template already preinstalls these packages.
+
+The reference package baseline matches the dNLab template builder: Debian
+13/Trixie on `amd64`, Docker Engine from Docker's official Debian repository,
+the Docker Compose plugin from the Docker packages, and Containerlab from the
+NetDevOps Fury APT repository.
+
+Install the base APT tools first:
+
+```bash
+apt-get update
+apt-get install -y --no-install-recommends \
+  ca-certificates \
+  curl \
+  gnupg
+```
+
+Add Docker's official Debian repository and install Docker Engine, containerd,
+Buildx and the Compose plugin:
+
+```bash
+install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg \
+  -o /etc/apt/keyrings/docker.asc
+chmod 0644 /etc/apt/keyrings/docker.asc
+cat >/etc/apt/sources.list.d/docker.list <<'EOF'
+deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable
+EOF
+
+apt-get update
+apt-get install -y --no-install-recommends \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-ce \
+  docker-ce-cli \
+  docker-compose-plugin
+```
+
+Add the Containerlab APT repository and install Containerlab:
+
+```bash
+cat >/etc/apt/sources.list.d/netdevops.list <<'EOF'
+deb [trusted=yes] https://netdevops.fury.site/apt/ /
+EOF
+
+apt-get update
+apt-get install -y --no-install-recommends containerlab
+```
+
+Enable and verify Docker, then record the installed tool versions before
+deploying the dNLab stack:
+
+```bash
+systemctl enable --now docker
+systemctl status docker
+docker version
+docker compose version
+containerlab version
+```
+
 ### Bare Metal Install
 
 Use this path when installing the Docker distribution directly on one or more
