@@ -17,3 +17,5 @@ __pycache__/
 /scripts/release_ghcr.md
 /scripts/release_sources.py
 /scripts/release_sources.md
+/docs/release_ghcr.md
+/docs/release_sources.md
