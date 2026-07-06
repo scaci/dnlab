@@ -43,6 +43,11 @@ The template does not contain production secrets, admin bootstrap credentials,
 site TLS certificates or a fixed hostname. Those are generated or configured
 inside each CT.
 
+The template redistributes Debian packages, Docker Engine packages,
+Containerlab and dNLab files. License and package evidence is included inside
+the CT at `/usr/share/doc/dnlab/third-party/`, alongside the dNLab source tree
+under `/opt/dnlab`.
+
 ## Prepare The Proxmox Host
 
 dNLab LXC deployments need enough loop devices for nested lab workloads. On the

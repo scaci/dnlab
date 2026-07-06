@@ -53,6 +53,28 @@ availability policy.
 
 ---
 
+## Containerlab and third-party tools
+
+dNLab orchestrates Containerlab as an external runtime tool. The AGPL license
+for dNLab applies to dNLab's own orchestration, GUI, distribution scripts and
+supporting code. It does not relicense Containerlab, Docker, Debian, Alpine
+Linux, PostgreSQL, FRRouting, Python dependencies or vendor/NOS images that are
+separately licensed by their own right holders.
+
+In the standard bare-metal deployment, administrators install Docker and
+Containerlab on the host and dNLab services may bind-mount the host
+`containerlab` binary. In the Proxmox LXC template, Docker packages,
+Containerlab and Debian packages are redistributed inside the template rootfs;
+their package metadata and notices are preserved under
+`/usr/share/doc/dnlab/third-party/` in the built artifact.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party notice
+handling, generated SBOM expectations and non-endorsement notes. References to
+Containerlab, Docker, Nokia, srl-labs or other third-party names do not imply
+official endorsement or affiliation.
+
+---
+
 ## Commercial licensing
 
 If `AGPL-3.0-or-later` is incompatible with your business model, for example

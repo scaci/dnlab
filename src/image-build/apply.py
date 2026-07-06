@@ -24,15 +24,19 @@ succeeds without modifying the file.
 from __future__ import annotations
 
 import argparse
+import json
 import importlib
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 TAG_SUFFIX_DEFAULT = "-dnlab"
+DERIVED_NOTICE_PATH = "/usr/share/doc/dnlab/DERIVED_IMAGE_NOTICE.md"
 
 
 def _run(cmd: list[str], check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
@@ -49,6 +53,17 @@ def _run(cmd: list[str], check: bool = True, capture: bool = False) -> subproces
 def _image_exists_locally(image: str) -> bool:
     res = _run(["docker", "image", "inspect", image], check=False, capture=True)
     return res.returncode == 0
+
+
+def _image_identity(image: str) -> str:
+    res = _run(["docker", "image", "inspect", image], capture=True)
+    data = json.loads(res.stdout)
+    if not data:
+        return "unknown"
+    repo_digests = data[0].get("RepoDigests") or []
+    if repo_digests:
+        return repo_digests[0]
+    return data[0].get("Id", "unknown")
 
 
 def _extract_files(image: str, files: list[str], dest: Path) -> None:
@@ -68,11 +83,56 @@ def _build_patched(
     tag: str,
     build_dir: Path,
     patched_files: dict[str, Path],
+    *,
+    kind: str,
+    upstream_identity: str,
+    dnlab_version: str,
+    generated_at: str,
 ) -> None:
     dockerfile = build_dir / "Dockerfile"
+    notice = build_dir / "DERIVED_IMAGE_NOTICE.md"
+    notice.write_text(
+        "\n".join(
+            [
+                "# dNLab Derived Image Notice",
+                "",
+                f"- Upstream image: `{upstream}`",
+                f"- Upstream identity: `{upstream_identity}`",
+                f"- dNLab patch kind: `{kind}`",
+                f"- dNLab version: `{dnlab_version}`",
+                f"- Generated at: `{generated_at}`",
+                "",
+                "This image was rebuilt by dNLab from the upstream image listed",
+                "above after applying dNLab runtime or persistence patches.",
+                "Redistribution must preserve the upstream image notices and",
+                "comply with the upstream image and vendor software licenses.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    labels = {
+        "org.opencontainers.image.base.name": upstream,
+        "org.opencontainers.image.base.digest": upstream_identity,
+        "org.opencontainers.image.created": generated_at,
+        "org.opencontainers.image.version": dnlab_version,
+        "org.opencontainers.image.vendor": "dNLab",
+        "org.dnlab.patch.kind": kind,
+        "org.dnlab.patch.notice": DERIVED_NOTICE_PATH,
+    }
     lines = [f"FROM {upstream}", ""]
+    for key, value in labels.items():
+        lines.append(f"LABEL {key}={json.dumps(value)}")
+    lines.append("")
     for target_path, local_file in patched_files.items():
         lines.append(f"COPY {local_file.name} {target_path}")
+    lines.extend(
+        [
+            "RUN mkdir -p /usr/share/doc/dnlab",
+            f"COPY {notice.name} {DERIVED_NOTICE_PATH}",
+        ]
+    )
     dockerfile.write_text("\n".join(lines) + "\n")
     _run(["docker", "build", "-t", tag, str(build_dir)])
 
@@ -100,6 +160,9 @@ def main() -> int:
         return 2
 
     out_tag = f"{args.image}{args.tag_suffix}"
+    upstream_identity = _image_identity(args.image)
+    dnlab_version = os.getenv("DNLAB_VERSION", "unknown")
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     print(f"[{mod.KIND}] upstream={args.image} -> {out_tag}", file=sys.stderr)
 
     with tempfile.TemporaryDirectory(prefix="dnlab-image-build-") as td:
@@ -123,7 +186,16 @@ def main() -> int:
                 print(f"# {target}\n{local.read_text()}\n")
             return 0
 
-        _build_patched(args.image, out_tag, build_dir, patched)
+        _build_patched(
+            args.image,
+            out_tag,
+            build_dir,
+            patched,
+            kind=mod.KIND,
+            upstream_identity=upstream_identity,
+            dnlab_version=dnlab_version,
+            generated_at=generated_at,
+        )
 
     print(f"built {out_tag}", file=sys.stderr)
     return 0

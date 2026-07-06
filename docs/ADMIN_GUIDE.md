@@ -670,7 +670,7 @@ docker compose \
 The hardening override makes the GUI filesystem read-only, drops GUI Linux
 capabilities, adds tmpfs mounts for transient paths, and applies
 `no-new-privileges` to GUI, proxy, auth DB and image-build. `multinode`
-remains the privileged orchestration boundary for Docker, ContainerLab and host
+remains the privileged orchestration boundary for Docker, Containerlab and host
 operations. `image-build` keeps the Docker socket because image builds
 require Docker and the service remains internal-only.
 
@@ -762,4 +762,3 @@ DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
 DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
-

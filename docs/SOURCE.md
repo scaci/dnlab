@@ -43,6 +43,13 @@ Each source archive includes a `SOURCE-MANIFEST.json` file that identifies the
 image, version, source repository, release tag, commit SHA, Dockerfile and build
 context used for the corresponding image.
 
+Each public image should also carry a generated third-party notice bundle inside
+the image at `/usr/share/doc/dnlab/third-party/`. The bundle records the image
+SBOM, package metadata and license files for base-image packages, Python
+dependencies and other included third-party components. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the bundle layout and
+validation expectations.
+
 After downloading the assets for a release, verify them with:
 
 ```bash
@@ -69,3 +76,8 @@ per-image AGPL source archives listed above; those remain the corresponding
 source for the GHCR images used by the stack. The same LXC files may be
 attached to the GitHub Release as a browser-friendly mirror, but GHCR is the
 canonical registry location.
+
+The template is also expected to include
+`/usr/share/doc/dnlab/third-party/`, containing the Debian package inventory,
+Docker package metadata, Containerlab metadata, copied package license files
+and the generated template third-party notice.

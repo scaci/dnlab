@@ -14,7 +14,15 @@ COPY app/views/static/img/ /opt/dnlab-gui/app/views/static/img/
 RUN a2dissite 000-default.conf \
     && a2ensite 000-dnlab-gui.conf \
     && mkdir -p /var/www/acme-challenge \
-    && chmod +x /usr/local/bin/dnlab-apache-entrypoint
+    && chmod +x /usr/local/bin/dnlab-apache-entrypoint \
+    && mkdir -p /usr/share/doc/dnlab/third-party \
+    && printf '%s\n' \
+        '# dNLab Third-Party Notices' \
+        '' \
+        'This image contains the dNLab proxy plus Debian and Apache HTTP Server packages.' \
+        'Release builds must attach a generated SBOM and full notice bundle for the exact image tag.' \
+        'See the public dNLab THIRD_PARTY_NOTICES.md for policy details.' \
+        > /usr/share/doc/dnlab/third-party/THIRD_PARTY_NOTICES.md
 
 EXPOSE 80 443
 ENTRYPOINT ["dnlab-apache-entrypoint"]

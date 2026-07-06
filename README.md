@@ -12,7 +12,7 @@
 
 ## Overview
 
-**dNLab** (distributed Network Labs) is an application built around a [Containerlab](https://containerlab.dev) core. It lets you build network labs on a single node or automatically distribute them across multiple nodes, so a topology can start small and grow beyond the capacity of one machine.
+**dNLab** (distributed Network Labs) is an application that orchestrates [Containerlab](https://containerlab.dev) as an external runtime tool. It lets you build network labs on a single node or automatically distribute them across multiple nodes, so a topology can start small and grow beyond the capacity of one machine.
 
 Orchestration is fully automatic and transparent. You design the topology; dNLab handles placing and managing it across the configured infrastructure — including single-host placement, device scheduling, intra-host links and cross-host dataplane connectivity when multiple workers are present. The distribution layer stays out of your way: you reason about the network you want, not the hosts it runs on.
 
@@ -37,8 +37,8 @@ Recommended baseline:
 - Docker Compose plugin installed through the official Docker packages.
 - systemd, cgroup v2 and the stock Debian 13 kernel.
 - Local Docker storage on a reliable ext4 or xfs filesystem.
-- [ContainerLab](https://containerlab.dev) installed.
-- Root or sudo access for Docker, ContainerLab and host networking.
+- [Containerlab](https://containerlab.dev) installed.
+- Root or sudo access for Docker, Containerlab and host networking.
 - Public inbound access only to the proxy ports, normally 80/443.
 
 Use the Docker packages from Docker's repository, not the generic Debian
@@ -131,7 +131,7 @@ to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_VERSION`.
 
 ## Key Features
 
-- **Containerlab-based core** — leverages Containerlab for defining and running virtual network topologies.
+- **Containerlab orchestration** — invokes Containerlab for defining and running virtual network topologies without being a fork of Containerlab.
 - **Single-node or multi-node operation** — a lab can run on one host or be
   spread automatically across multiple worker nodes.
 - **Automatic, transparent orchestration** — placement, scheduling, and link management are handled for you; no manual host assignment required.
@@ -207,3 +207,6 @@ Internal on-premises use does not require publishing your modifications solely
 because of that internal use. See [LICENSE_FAQ.md](docs/LICENSE_FAQ.md) for practical
 notes on AGPL obligations and commercial licensing. See [SOURCE.md](docs/SOURCE.md)
 for the source availability policy for published dNLab container images.
+Third-party tools and packages keep their own licenses; see
+[THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) for notice handling,
+SBOM expectations and non-endorsement notes.

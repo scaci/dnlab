@@ -18,5 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN mkdir -p /usr/share/doc/dnlab/third-party \
+    && printf '%s\n' \
+        '# dNLab Third-Party Notices' \
+        '' \
+        'This image contains dNLab plus third-party base-image packages and Python dependencies.' \
+        'Release builds must attach a generated SBOM and full notice bundle for the exact image tag.' \
+        'See /opt/dnlab-gui/requirements.txt and the public dNLab THIRD_PARTY_NOTICES.md for policy details.' \
+        > /usr/share/doc/dnlab/third-party/THIRD_PARTY_NOTICES.md
+
 EXPOSE 8080
 CMD ["python", "/opt/dnlab-gui/run.py"]

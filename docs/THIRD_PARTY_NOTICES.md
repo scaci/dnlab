@@ -1,47 +1,142 @@
 # Third-Party Notices
 
-dNLab uses and integrates with third-party operating systems, container images,
-tools and network device images. This file records the initial project-level
-notices. Image-specific software bills of materials and package notices should
-be published as release artifacts or added here before a public image release.
+dNLab is licensed under `AGPL-3.0-or-later`. It also uses, invokes, packages
+or helps build software distributed under other licenses. This file is the
+project-level notice index; release artifacts must include artifact-specific
+notice bundles as described below.
 
-## Runtime and Platform Components
+This document is informational and is not legal advice.
 
-- Debian is the recommended host operating system. Debian is not distributed as
-  part of this repository; hosts must comply with Debian and package licenses.
-- Docker Engine and the Docker Compose plugin are required host tools. They are
-  not distributed as part of this repository.
-- Containerlab is a required host tool for network lab orchestration. dNLab may
-  mount the host `containerlab` binary into services at runtime; if an image
-  later redistributes Containerlab, its license notice must be included with
-  that image.
-- PostgreSQL is used through the stock `postgres:16-alpine` image in the Docker
-  Compose stack. If dNLab mirrors or redistributes that image, the relevant
-  PostgreSQL, Alpine Linux and package notices must be preserved.
-- Apache HTTP Server is used by the dNLab proxy image. The proxy image must
-  preserve Apache HTTP Server license and notice requirements.
-- Alpine Linux and other base-image packages may be present in dNLab container
-  images. Their package-level licenses must be tracked per image.
+## Notice Bundle Format
 
-## Network Operating System Images
-
-dNLab does not distribute proprietary or vendor network operating system images.
-Users must provide any NOS/vendor images themselves and are responsible for
-complying with the relevant vendor license terms.
-
-## Image SBOM / Package Notices
-
-For each public GHCR image tag, publish image-specific SBOM/package notices as
-release artifacts or add an image-specific section here before release
-promotion. Do not use placeholder SBOM entries in a public release.
-
-Template:
+Each public binary artifact should have a generated notice bundle:
 
 ```text
-### ghcr.io/scaci/dnlab-<component>:<version>
-
-- SBOM: <path or release artifact>
-- Base image: <image and version>
-- Included third-party packages: <summary or generated notice file>
-- License exceptions or special obligations: <none or details>
+dist/notices/<artifact>/
+  SBOM.spdx.json
+  THIRD_PARTY_NOTICES.md
+  package-metadata/
+  license-files/
 ```
+
+For container images, copy the bundle into the image at:
+
+```text
+/usr/share/doc/dnlab/third-party/
+```
+
+For the Proxmox LXC template, include the same path inside the rootfs. The
+bundle records the exact packages present in that artifact; this top-level file
+does not try to replace per-image SBOMs.
+
+## Host Prerequisites
+
+The standard bare-metal deployment expects administrators to install these
+host tools:
+
+- Debian GNU/Linux or another supported Linux distribution.
+- Docker Engine, containerd, Docker Buildx and the Docker Compose plugin.
+- Containerlab.
+
+These tools are not distributed by the dNLab Docker Compose stack when they are
+installed directly on the host. Administrators are responsible for complying
+with the licenses of the packages they install. dNLab services may bind-mount
+the host `containerlab` binary into containers so the service can invoke it as
+an external runtime tool.
+
+The Proxmox LXC template is different: it bundles Docker packages,
+Containerlab, Debian packages and dNLab files in one redistributable rootfs.
+See the template section below.
+
+## Distributed dNLab Images
+
+Public dNLab images are published as `ghcr.io/scaci/dnlab-*` images. Each image
+must carry an embedded notice bundle under
+`/usr/share/doc/dnlab/third-party/`.
+
+Current release image families:
+
+- `ghcr.io/scaci/dnlab-gui`
+- `ghcr.io/scaci/dnlab-proxy`
+- `ghcr.io/scaci/dnlab-multinode`
+- `ghcr.io/scaci/dnlab-lab-cleanup`
+- `ghcr.io/scaci/dnlab-image-build`
+- `ghcr.io/scaci/dnlab-jumphost`
+- `ghcr.io/scaci/dnlab-dns`
+- `ghcr.io/scaci/dnlab-runtime-relay`
+- `ghcr.io/scaci/dnlab-realnet-router`
+- `ghcr.io/scaci/dnlab-realnet-rr`
+- `ghcr.io/scaci/dnlab-mgmt-anchor`
+
+The images include combinations of Debian, Alpine Linux, Python packages, APT
+or APK packages and dNLab application code. Examples include Apache HTTP
+Server, OpenSSH, Docker CLI packages, FRRouting, dnsmasq, tcpdump, qemu-utils,
+FastAPI, Pydantic, Docker SDK for Python and Paramiko. Image-specific SBOMs
+and package metadata are the release source of truth for exact versions and
+licenses.
+
+Known direct Python license flags to verify in generated image bundles:
+
+- `paramiko==4.0.0` declares `LGPL-2.1` in PyPI metadata.
+- Docker SDK for Python declares Apache Software License classifiers in PyPI
+  metadata.
+- FastAPI and Pydantic declare MIT License classifiers in PyPI metadata.
+
+## Proxmox LXC Template
+
+The Proxmox LXC template is a redistributed binary artifact. It includes a
+Debian rootfs, Docker Engine packages, Containerlab, dNLab source files and the
+Compose stack that pulls the runtime images.
+
+The template build must capture:
+
+- `dpkg-query` package inventory.
+- `/var/lib/dpkg/status`.
+- Debian package copyright files under `/usr/share/doc/*/copyright`.
+- Docker package metadata and documentation present in the rootfs.
+- Containerlab version, package metadata, package file list and any installed
+  license or notice files.
+- This repository's `LICENSE`, `docs/LICENSE_FAQ.md`,
+  `docs/THIRD_PARTY_NOTICES.md` and `docs/SOURCE.md`.
+
+Containerlab license metadata can differ by installed package version or
+distribution channel. For example, a previously sampled LXC artifact contained
+`containerlab 0.76.1` package metadata declaring `License: GNU GPLv3`, while
+the current upstream GitHub repository presents a `BSD-3-Clause` project
+license. dNLab release validation must preserve the exact package evidence for
+the shipped artifact and must not replace it with an assumed license.
+
+## Generated Or Patched Images
+
+`src/image-build` can build or patch images derived from upstream images such
+as `vrnetlab/*`, `quay.io/frrouting/frr`, or user-provided vendor/NOS images.
+When dNLab builds a `-dnlab` image it applies dNLab persistence or startup
+patches to files extracted from the upstream image.
+
+If dNLab distributes such an image, the distributed image must:
+
+- preserve applicable upstream license and copyright notices;
+- include a dNLab derived-image notice describing the upstream image, upstream
+  digest, patch kind and dNLab version;
+- mark modified files or otherwise make the modification provenance clear;
+- comply with the license terms of the upstream image and any included vendor
+  software.
+
+dNLab does not distribute proprietary network operating system images. Users
+who build private images from vendor media are responsible for complying with
+the relevant vendor license terms.
+
+## Stock External Images
+
+The Compose stack references `postgres:16-alpine` as a stock external image.
+dNLab does not mirror or redistribute that image by default. If dNLab mirrors,
+vendors, republishes or modifies it, the relevant PostgreSQL, Alpine Linux and
+package notices must be preserved in the redistributed artifact.
+
+## Non-Endorsement
+
+The names Docker, Debian, Alpine Linux, PostgreSQL, Containerlab, Nokia,
+srl-labs, FRRouting and vendor NOS names identify third-party projects or
+products. Their use in dNLab documentation and metadata does not imply
+endorsement, sponsorship or affiliation unless explicitly stated by the
+respective rights holder.

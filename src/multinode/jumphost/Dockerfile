@@ -23,7 +23,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/run/sshd \
     && useradd -m -s /bin/bash labuser \
-    && echo "labuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    && echo "labuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p /usr/share/doc/dnlab/third-party \
+    && printf '%s\n' \
+        '# dNLab Third-Party Notices' \
+        '' \
+        'This image contains the dNLab jumphost helper plus Debian packages such as OpenSSH, tcpdump and network tools.' \
+        'Release builds must attach a generated SBOM and full notice bundle for the exact image tag.' \
+        > /usr/share/doc/dnlab/third-party/THIRD_PARTY_NOTICES.md
 
 COPY entrypoint.sh /entrypoint.sh
 COPY vd /usr/local/bin/vd
