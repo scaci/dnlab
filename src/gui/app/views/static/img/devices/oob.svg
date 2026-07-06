@@ -1,0 +1,19 @@
+<svg viewBox="0 0 64 64"
+     xmlns="http://www.w3.org/2000/svg"
+     fill="none"
+     stroke="#ffffff"
+     stroke-width="3"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <!-- Nodes -->
+  <circle cx="16" cy="20" r="6"/>
+  <circle cx="48" cy="20" r="6"/>
+  <circle cx="32" cy="44" r="6"/>
+
+  <!-- Links -->
+  <path d="M22 22 L42 22"/>
+  <path d="M18 26 L30 38"/>
+  <path d="M46 26 L34 38"/>
+
+</svg>

@@ -13,6 +13,10 @@ letsencrypt/
 dist/
 __pycache__/
 *.pyc
+src/*/venv/
+src/*/.venv/
+src/*/.pytest_cache/
+src/*/*.egg-info/
 /scripts/release_ghcr.py
 /scripts/release_ghcr.md
 /scripts/release_sources.py

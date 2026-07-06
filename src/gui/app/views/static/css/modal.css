@@ -1,0 +1,120 @@
+/* ── Modal ───────────────────────────────────────────────────────────── */
+#modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+#modal-overlay.active { display: flex; }
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 380px;
+  max-width: 95vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+}
+.modal.modal-wide { width: 560px; }
+.modal-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 14px;
+}
+.modal-body   { padding: 16px; overflow-y: auto; flex: 1; }
+.modal-footer { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+.topo-list { list-style: none; }
+.topo-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+}
+.topo-list li:hover { background: var(--bg-hover); border-color: var(--border); }
+.topo-list li small { color: var(--text-muted); }
+
+.capture-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.capture-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  font-size: 12px;
+}
+.capture-summary div {
+  min-width: 0;
+}
+.capture-summary span {
+  display: block;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.capture-summary strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.capture-label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.capture-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+.capture-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  font-size: 12px;
+}
+.capture-hint,
+.capture-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.capture-error {
+  color: var(--error);
+  font-size: 12px;
+}
+.capture-setup {
+  margin-top: 10px;
+}
+.capture-setup pre {
+  margin: 6px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  background: var(--bg-hover);
+}
+.capture-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}

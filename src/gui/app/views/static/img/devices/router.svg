@@ -1,0 +1,17 @@
+<svg viewBox="0 0 64 64"
+     xmlns="http://www.w3.org/2000/svg"
+     fill="none"
+     stroke="#ffffff"
+     stroke-width="3"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <path d="M16 32 H48"/>
+  <path d="M48 32 L42 26"/>
+  <path d="M48 32 L42 38"/>
+
+  <path d="M32 48 V16"/>
+  <path d="M32 16 L26 22"/>
+  <path d="M32 16 L38 22"/>
+
+</svg>

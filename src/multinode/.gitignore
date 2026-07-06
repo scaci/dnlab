@@ -1,0 +1,29 @@
+# Python
+venv/
+.wheelhouse/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+
+# Local documentation
+docs/
+
+# Runtime artifacts
+generated/
+examples/*.bak
+examples/.image-cache.json
+*.log
+
+# Local tooling / backups
+.codex
+*.bak
+*.bak.*
+
+# OS
+.DS_Store

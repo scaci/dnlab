@@ -182,7 +182,7 @@ Create `.env` from `.env.example` and set a strong database password before
 starting the stack. At minimum, set:
 
 ```text
-DNLAB_VERSION=0.1.0
+DNLAB_VERSION=0.1.1
 POSTGRES_PASSWORD=<long random value>
 DNLAB_PROXY_SERVER_NAME=<gui-hostname>
 DNLAB_PROXY_HTTPS_PORT=<https-port>
@@ -202,7 +202,7 @@ DNLABGUI_ALLOWED_ORIGINS=https://localhost:8443
 
 Important settings:
 
-- `DNLAB_VERSION`: image tag. For this release, use `DNLAB_VERSION=0.1.0`.
+- `DNLAB_VERSION`: image tag. For this release, use `DNLAB_VERSION=0.1.1`.
 - `DNLAB_IMAGE_PREFIX`: image registry prefix, normally `ghcr.io/scaci/`.
 - `DNLAB_RUNTIME_IMAGE_PREFIX`: runtime image prefix, normally
   `ghcr.io/scaci/dnlab-`.
@@ -359,6 +359,68 @@ docker compose -f compose.yml --profile seed-admin run --rm auth-seed
 ```
 
 11. Run the HTTPS smoke check again.
+
+### Bare Metal Install From Local Sources
+
+Use this path when the host should build the dNLab Docker images from the
+monorepo sources instead of pulling the published GHCR images. Keep the same
+host preparation, SSH, TLS, `.env`, vrnetlab and validation steps from the
+bare-metal install above.
+
+Application sources live under `/opt/dnlab/src`:
+
+- GUI: `/opt/dnlab/src/gui`
+- proxy: `/opt/dnlab/src/gui/deploy/apache/Dockerfile`
+- multinode API and image-sync: `/opt/dnlab/src/multinode`
+- lab-cleanup: `/opt/dnlab/src/multinode/Dockerfile.cleanup`
+- image-build: `/opt/dnlab/src/image-build`
+- runtime helper images:
+  `/opt/dnlab/src/multinode/{jumphost,dns,runtime-relay,realnet-router,realnet-rr,mgmt-anchor}`
+
+Use a local tag and prefixes that still match `compose.yml` image names:
+
+```text
+DNLAB_VERSION=local
+DNLAB_IMAGE_PREFIX=dnlab-local/
+DNLAB_RUNTIME_IMAGE_PREFIX=dnlab-local/dnlab-
+```
+
+Build the application images:
+
+```bash
+cd /opt/dnlab
+docker build -t dnlab-local/dnlab-gui:local -f src/gui/Dockerfile src/gui
+docker build -t dnlab-local/dnlab-proxy:local -f src/gui/deploy/apache/Dockerfile src/gui
+docker build -t dnlab-local/dnlab-multinode:local -f src/multinode/Dockerfile src/multinode
+docker build -t dnlab-local/dnlab-lab-cleanup:local -f src/multinode/Dockerfile.cleanup src/multinode
+docker build -t dnlab-local/dnlab-image-build:local -f src/image-build/Dockerfile src/image-build
+```
+
+Build the runtime helper images used later by lab orchestration:
+
+```bash
+docker build -t dnlab-local/dnlab-jumphost:local -f src/multinode/jumphost/Dockerfile src/multinode/jumphost
+docker build -t dnlab-local/dnlab-dns:local -f src/multinode/dns/Dockerfile src/multinode/dns
+docker build -t dnlab-local/dnlab-runtime-relay:local -f src/multinode/runtime-relay/Dockerfile src/multinode/runtime-relay
+docker build -t dnlab-local/dnlab-realnet-router:local -f src/multinode/realnet-router/Dockerfile src/multinode/realnet-router
+docker build -t dnlab-local/dnlab-realnet-rr:local -f src/multinode/realnet-rr/Dockerfile src/multinode/realnet-rr
+docker build -t dnlab-local/dnlab-mgmt-anchor:local -f src/multinode/mgmt-anchor/Dockerfile src/multinode/mgmt-anchor
+```
+
+After the images exist locally, start the same Compose stack without the
+release-image pull step:
+
+```bash
+docker compose -f compose.yml up -d proxy
+COMPOSE_FILES=compose.yml \
+DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
+DNLAB_SMOKE_CURL_INSECURE=1 \
+./smoke.sh
+```
+
+When a dedicated local-build Compose override is present, use it only as a
+shorter way to build the same image names and tags; `compose.yml` remains the
+runtime source of truth.
 
 ### Proxmox LXC Template Install
 
@@ -548,8 +610,10 @@ infrastructure:
 
 ## Image Build And Image Sync
 
-`image-build` provides an internal API for upload, build jobs and job log
-streaming. Build metadata and logs are stored under
+`image-build` provides an internal API for virtual-device image uploads,
+vrnetlab build jobs and job log streaming. It is separate from building the
+dNLab application images from the monorepo sources under `/opt/dnlab/src`.
+Build metadata and logs are stored under
 `${DNLAB_IMAGE_BUILD_WORKSPACE:-/var/lib/dnlab-image-build}`.
 Build contexts are read from `${DNLAB_VRNETLAB_DIR:-/opt/vrnetlab}`, which
 must be the `dnlab` branch of `https://github.com/scaci/vrnetlab.git`.
@@ -653,7 +717,7 @@ Pull the full release image set selected by `.env`, then recreate the internal
 services and proxy:
 
 ```bash
-grep '^DNLAB_VERSION=0.1.0$' .env
+grep '^DNLAB_VERSION=0.1.1$' .env
 docker compose -f compose.yml --profile release-images pull
 docker compose -f compose.yml up -d --force-recreate multinode lab-cleanup image-build gui proxy
 ```
@@ -698,5 +762,4 @@ DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \
 DNLAB_SMOKE_CURL_INSECURE=1 \
 ./smoke.sh
 ```
-
 

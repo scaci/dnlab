@@ -1,0 +1,122 @@
+/* ── M7 fase 2: users-management modal ──────────────────────────────── */
+#modal-overlay .modal:has(.users-modal) { width: 880px; max-width: 95vw; }
+.users-modal { min-width: 720px; }
+.users-loading {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-muted); padding: 20px;
+}
+.users-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.users-add-form {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+}
+.users-form-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.users-form-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 120px;
+}
+.users-form-row input,
+.users-form-row select {
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 7px;
+  font-size: 12px;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.users-table th,
+.users-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.users-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.users-num  { text-align: right; color: var(--text-muted); width: 40px; }
+.users-dim  { color: var(--text-muted); font-size: 11px; }
+.users-uname { font-weight: 600; }
+.users-self {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+.users-actions-col { text-align: right; width: 160px; }
+.users-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.users-actions .btn-xs {
+  padding: 2px 6px;
+  font-size: 12px;
+  margin-left: 2px;
+}
+.btn-xs {
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.users-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.users-pill-ok  { background: var(--ok,   #28a745); color: #fff; }
+.users-pill-off { background: var(--warn, #888);    color: #fff; }
+
+.users-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* Role pills — reuse the badge colours from the user badge if present.
+ * Fall back to neutral styling when the accent vars aren't defined. */
+.role-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.role-pill.role-admin    { background: #b45309; color: #fff; }
+.role-pill.role-graduate { background: #2563eb; color: #fff; }
+.role-pill.role-assistant { background: #7c3aed; color: #fff; }
+.role-pill.role-student  { background: #059669; color: #fff; }
+.role-pill.role-rookie   { background: #6b7280; color: #fff; }

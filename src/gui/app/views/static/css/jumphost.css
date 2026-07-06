@@ -1,0 +1,64 @@
+/* ── M5: jumphost box in toolbar ────────────────────────────────────── */
+.jumphost-box {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 11px;
+  margin-left: 8px;
+  max-width: 320px;
+}
+.jumphost-box .jh-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.jumphost-box .jh-dot-ok  { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.jumphost-box .jh-dot-err { background: var(--error);   box-shadow: 0 0 6px var(--error); }
+.jumphost-box .jh-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.7px;
+  font-weight: 700;
+}
+.jumphost-box .jh-cmd {
+  font-family: 'Fira Mono', 'Cascadia Code', monospace;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: transparent;
+}
+.jumphost-box .jh-cmd:hover { background: var(--bg-hover); }
+.jumphost-box .jh-copy {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 13px;
+}
+.jumphost-box .jh-copy:hover { color: var(--accent); }
+.jumphost-box .jh-pwd {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  user-select: none;
+}
+.jumphost-box .jh-pwd:hover { color: var(--accent); background: var(--bg-hover); }
+

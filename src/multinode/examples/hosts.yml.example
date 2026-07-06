@@ -1,0 +1,62 @@
+# Example global host inventory for dnlab-multinode.
+# Copy to /etc/dnlab/hosts.yml (or point DNLAB_MULTINODE_HOSTS at it).
+#
+# Per-lab the topology YAML carries only `jumphost: { image: ... }`.
+# The jumphost network (bridge/subnet/gateway) is shared infrastructure
+# and lives here as `infrastructure.jumphost_net`.
+
+infrastructure:
+  master:
+    host: 10.0.0.1
+    ssh_user: root
+    ssh_key: ~/.ssh/id_ed25519
+  workers:
+    worker2:
+      host: 10.0.0.2
+      ssh_user: root
+      ssh_key: ~/.ssh/id_ed25519
+    worker3:
+      host: 10.0.0.3
+      ssh_user: root
+      ssh_key: ~/.ssh/id_ed25519
+  underlay_iface: eth0
+
+  # Shared jumphost docker network (master-local). All lab jumphosts
+  # attach here; per-lab IPs are auto-assigned from this pool at deploy.
+  jumphost_net:
+    network: dnlab-jumphost
+    bridge: br-dnlab-jh
+    ipv4_subnet: 192.168.100.0/24
+    ipv4_gw: 192.168.100.1
+
+  # Persistent VD overlays. local-sticky is the default and keeps state on
+  # each worker; cephfs can be enabled after mounting a shared CephFS path on
+  # every node.
+  persistence:
+    backend: local-sticky
+    root: /var/lib/docker/dnlab-backups
+    allow_migration_fallback: true
+    cephfs:
+      mountpoint: /var/lib/docker/dnlab-backups
+      expected_fstype: ceph
+      marker: .dnlab-cephfs
+      require_shared_marker: true
+
+# Applied to every topology that omits the matching fields in its `mgmt:` block.
+defaults:
+  mgmt:
+    ipv4_subnet: 172.20.0.0/24
+    ipv4_gw: 172.20.0.1
+
+# Image-sync daemon config (optional; daemon is Milestone 2).
+image_sync:
+  enabled: true
+  include:
+    - "vrnetlab/*"
+    - "dnlab/runtime-relay"
+  exclude:
+    - "dnlab/jumphost"
+    - "dnlab/dns"
+    - "postgres"
+    - "<none>:<none>"
+  interval_seconds: 300

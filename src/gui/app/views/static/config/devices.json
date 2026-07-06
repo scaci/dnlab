@@ -1,0 +1,2396 @@
+{
+  "_comment": "Device catalog. Single source of truth for the GUI: maps GUI kind → vendor + graphical type + short label + mgmt interface + optional exposed Web UIs. If the GUI kind does not match the Containerlab kind, set deploy_kind. To recognize non-standard Docker images, use image_patterns. To add a new device, add an entry to kinds with an already-known vendor and a type listed in icons (or add a new type + SVG). No JS changes required.",
+  "_palette_notes": "Palette chosen to respect real brands where possible (Cisco cyan, Nokia navy, Juniper green, Huawei red, Arista red-orange, NVIDIA/Cumulus lime, Palo Alto orange, Extreme purple, HPE Aruba amber, Fortinet red, Checkpoint pink-magenta) and keep secondary vendors on hues that do not collide with primary vendors.",
+  "_webui_notes": "The 'webui' field is a list of known ports exposed by the VD as web interfaces. The '🌐 Web UI' button in the context menu appears if (a) the kind has at least one entry here, or (b) the node has custom ports in extra.webui_ports. Each entry: {scheme: 'http'|'https', port: int, path: '/', label: 'J-Web'}.",
+  "overrides": {
+    "cat9kv_vswitch": {
+      "label": "Catalyst 9000V platform",
+      "description": "Generate vswitch.xml and mount it as /vswitch.xml.",
+      "default_platform": "UADP",
+      "default_port_count": 24,
+      "platforms": [
+        {
+          "value": "UADP",
+          "label": "UADP",
+          "help": "Emula funzionalita tipiche Catalyst 9300."
+        },
+        {
+          "value": "Q200",
+          "label": "Q200",
+          "help": "Emula Cisco Silicon One, tipico Catalyst 9500/9600, con consumo RAM molto ridotto."
+        }
+      ]
+    }
+  },
+  "node_features": {
+    "frr_daemons": {
+      "label": "FRR daemons",
+      "description": "Select FRR protocol daemons to enable for this node.",
+      "ui": {
+        "type": "checkbox-list",
+        "items": [
+          {
+            "key": "bgpd",
+            "label": "BGP",
+            "default": false
+          },
+          {
+            "key": "ospfd",
+            "label": "OSPFv2",
+            "default": false
+          },
+          {
+            "key": "ospf6d",
+            "label": "OSPFv3",
+            "default": false
+          },
+          {
+            "key": "ripd",
+            "label": "RIP",
+            "default": false
+          },
+          {
+            "key": "ripngd",
+            "label": "RIPng",
+            "default": false
+          },
+          {
+            "key": "isisd",
+            "label": "IS-IS",
+            "default": false
+          },
+          {
+            "key": "pimd",
+            "label": "PIM",
+            "default": false
+          },
+          {
+            "key": "pim6d",
+            "label": "PIM6",
+            "default": false
+          },
+          {
+            "key": "ldpd",
+            "label": "LDP",
+            "default": false
+          },
+          {
+            "key": "nhrpd",
+            "label": "NHRP",
+            "default": false
+          },
+          {
+            "key": "eigrpd",
+            "label": "EIGRP",
+            "default": false
+          },
+          {
+            "key": "babeld",
+            "label": "Babel",
+            "default": false
+          },
+          {
+            "key": "sharpd",
+            "label": "SHARP",
+            "default": false
+          },
+          {
+            "key": "pbrd",
+            "label": "PBR",
+            "default": false
+          },
+          {
+            "key": "bfdd",
+            "label": "BFD",
+            "default": false
+          },
+          {
+            "key": "fabricd",
+            "label": "Fabric",
+            "default": false
+          },
+          {
+            "key": "vrrpd",
+            "label": "VRRP",
+            "default": false
+          },
+          {
+            "key": "pathd",
+            "label": "Path",
+            "default": false
+          }
+        ]
+      },
+      "materialize": {
+        "type": "persist-key-value-bool-file",
+        "path": "frr/daemons",
+        "true": "yes",
+        "false": "no"
+      }
+    }
+  },
+  "defaults": {
+    "type": "router",
+    "vendor": "generic",
+    "mgmt_iface": "eth0"
+  },
+  "vendors": {
+    "cisco": {
+      "title": "Cisco",
+      "color": "#049fd9"
+    },
+    "juniper": {
+      "title": "Juniper",
+      "color": "#84b135"
+    },
+    "arista": {
+      "title": "Arista",
+      "color": "#f04e23"
+    },
+    "nokia": {
+      "title": "Nokia",
+      "color": "#124191"
+    },
+    "huawei": {
+      "title": "Huawei",
+      "color": "#e60012"
+    },
+    "mikrotik": {
+      "title": "MikroTik",
+      "color": "#293133"
+    },
+    "extreme": {
+      "title": "Extreme",
+      "color": "#702f8a"
+    },
+    "nvidia": {
+      "title": "Nvidia",
+      "color": "#33691e"
+    },
+    "aruba": {
+      "title": "Aruba (HPE)",
+      "color": "#ff8300"
+    },
+    "sonic": {
+      "title": "SONiC",
+      "color": "#0097a7"
+    },
+    "dell": {
+      "title": "Dell",
+      "color": "#007db8"
+    },
+    "ipinfusion": {
+      "title": "IP Infusion",
+      "color": "#558b2f"
+    },
+    "paloalto": {
+      "title": "Palo Alto",
+      "color": "#fa582d"
+    },
+    "fortinet": {
+      "title": "Fortinet",
+      "color": "#da291c"
+    },
+    "checkpoint": {
+      "title": "Check Point",
+      "color": "#cf2a8d"
+    },
+    "keysight": {
+      "title": "Keysight",
+      "color": "#ffc107"
+    },
+    "spirent": {
+      "title": "Spirent",
+      "color": "#ab47bc"
+    },
+    "vyos": {
+      "title": "VyOS",
+      "color": "#5e35b1"
+    },
+    "6wind": {
+      "title": "6WIND",
+      "color": "#795548"
+    },
+    "arrcus": {
+      "title": "Arrcus",
+      "color": "#1a237e"
+    },
+    "veesix": {
+      "title": "Veesix",
+      "color": "#f06292"
+    },
+    "ovs": {
+      "title": "Open vSwitch",
+      "color": "#546e7a"
+    },
+    "linux": {
+      "title": "Linux",
+      "color": "#4a4a4a"
+    },
+    "generic": {
+      "title": "Other",
+      "color": "#888888"
+    },
+    "cumulus": {
+      "title": "cumulus",
+      "color": "#33691e"
+    },
+    "opnsense": {
+      "title": "OPNsense",
+      "color": "#f15a24"
+    }
+  },
+  "icons": {
+    "router": "img/devices/router.svg",
+    "switch": "img/devices/switch.svg",
+    "firewall": "img/devices/firewall.svg",
+    "server": "img/devices/server.svg",
+    "client": "img/devices/client.svg",
+    "cloud": "img/devices/cloud.svg",
+    "oob": "img/devices/oob.svg"
+  },
+  "kinds": {
+    "nokia_srlinux": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "e1-{n}",
+        "vendor_fmt": "ethernet-1/{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "SR Linux",
+      "vendor": "nokia",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "mgmt0"
+    },
+    "nokia_sros": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "1/1/{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "SR OS",
+      "vendor": "nokia",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "A/1",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "WebUI"
+        }
+      ]
+    },
+    "nokia_srsim": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "1/1/{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "SRsim",
+      "vendor": "nokia",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "A/1",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "WebUI"
+        }
+      ]
+    },
+    "arista_ceos": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "cEOS",
+      "vendor": "arista",
+      "type": "switch",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "Management0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "eAPI / Arista UI"
+        }
+      ]
+    },
+    "arista_veos": {
+      "env": {
+        "RAM": "2048",
+        "VCPU": "2",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "vEOS",
+      "vendor": "arista",
+      "type": "switch",
+      "mgmt_iface": "Management1",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "eAPI / Arista UI"
+        }
+      ]
+    },
+    "juniper_crpd": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "cRPD",
+      "vendor": "juniper",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "juniper_vmx": {
+      "env": {
+        "RAM": "6144",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "ge-0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "vMX",
+      "vendor": "juniper",
+      "type": "router",
+      "mgmt_iface": "fxp0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "J-Web"
+        }
+      ]
+    },
+    "juniper_vqfx": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "2",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "xe-0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "vQFX",
+      "vendor": "juniper",
+      "type": "switch",
+      "mgmt_iface": "fxp0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "J-Web"
+        }
+      ]
+    },
+    "juniper_vsrx": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "2",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "ge-0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "vSRX",
+      "vendor": "juniper",
+      "type": "firewall",
+      "mgmt_iface": "fxp0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "J-Web"
+        }
+      ]
+    },
+    "juniper_vjunosrouter": {
+      "env": {
+        "RAM": "5120",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "ge-0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "vJunos-R",
+      "vendor": "juniper",
+      "type": "router",
+      "mgmt_iface": "fxp0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "J-Web"
+        }
+      ]
+    },
+    "juniper_vjunosswitch": {
+      "env": {
+        "RAM": "5120",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "ge-0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "vJunos-SW",
+      "vendor": "juniper",
+      "type": "switch",
+      "mgmt_iface": "fxp0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "J-Web"
+        }
+      ]
+    },
+    "juniper_vjunosevolved": {
+      "env": {
+        "RAM": "8192",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "et-0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "vJEvo",
+      "vendor": "juniper",
+      "type": "switch",
+      "mgmt_iface": "re0:mgmt-0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "J-Web"
+        }
+      ]
+    },
+    "juniper_cjunosevolved": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "et-0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "cJEvo",
+      "vendor": "juniper",
+      "type": "switch",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "re0:mgmt-0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "J-Web"
+        }
+      ]
+    },
+    "cisco_xrd": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet0/0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "XRd",
+      "vendor": "cisco",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "MgmtEth0/RP0/CPU0/0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "XR WebUI"
+        }
+      ]
+    },
+    "cisco_xrv": {
+      "env": {
+        "RAM": "3072",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet0/0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "XRv",
+      "vendor": "cisco",
+      "type": "router",
+      "mgmt_iface": "MgmtEth0/0/CPU0/0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "XR WebUI"
+        }
+      ]
+    },
+    "cisco_xrv9k": {
+      "env": {
+        "RAM": "24576",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet0/0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "XRv9k",
+      "vendor": "cisco",
+      "type": "router",
+      "mgmt_iface": "MgmtEth0/RP0/CPU0/0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "XR WebUI"
+        }
+      ]
+    },
+    "cisco_csr1000v": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "CSR1000v",
+      "vendor": "cisco",
+      "type": "router",
+      "mgmt_iface": "GigabitEthernet1",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "IOS-XE WebUI"
+        }
+      ]
+    },
+    "cisco_n9kv": {
+      "env": {
+        "RAM": "10240",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet1/{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "N9Kv",
+      "vendor": "cisco",
+      "type": "switch",
+      "mgmt_iface": "mgmt0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "NX-API"
+        }
+      ]
+    },
+    "cisco_c8000": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "HundredGigE0/0/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "C8000",
+      "vendor": "cisco",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "MgmtEth0/RP0/CPU0/0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "XR WebUI"
+        }
+      ]
+    },
+    "cisco_c8000v": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "C8000v",
+      "vendor": "cisco",
+      "type": "router",
+      "mgmt_iface": "GigabitEthernet1",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "IOS-XE WebUI"
+        }
+      ]
+    },
+    "cisco_cat9kv": {
+      "override": "cat9kv_vswitch",
+      "env": {
+        "RAM": "18432",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet1/0/{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Cat9Kv",
+      "vendor": "cisco",
+      "type": "switch",
+      "mgmt_iface": "GigabitEthernet0/0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "IOS-XE WebUI"
+        }
+      ]
+    },
+    "cisco_c9800cl": {
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "env": {
+        "VCPU": "4",
+        "RAM": "18432",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet{n+2}",
+        "count": 3
+      },
+      "label": "C9800-CL",
+      "vendor": "cisco",
+      "type": "switch",
+      "deploy_kind": "cisco_cat9kv",
+      "image_patterns": [
+        "cisco_c9800cl",
+        "cisco_c9800cl_v2"
+      ],
+      "mgmt_iface": "GigabitEthernet2",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "IOS-XE WebUI"
+        }
+      ]
+    },
+    "cisco_iol": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet0/{i}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "IOL",
+      "vendor": "cisco",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "Ethernet0/0"
+    },
+    "cisco_vios": {
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "env": {
+        "VCPU": "1",
+        "RAM": "512",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet{module}/{port}",
+        "count": 8
+      },
+      "label": "IOSv",
+      "vendor": "cisco",
+      "type": "router",
+      "image_patterns": [
+        "cisco_vios_v2"
+      ],
+      "mgmt_iface": "GigabitEthernet0/0",
+      "webui": [
+        {
+          "scheme": "http",
+          "port": 80,
+          "path": "/",
+          "label": "IOS HTTP"
+        }
+      ]
+    },
+    "cisco_ftdv": {
+      "env": {
+        "RAM": "8192",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet0/{i}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "FTDv",
+      "vendor": "cisco",
+      "type": "firewall",
+      "mgmt_iface": "Management0/0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "FMC"
+        }
+      ]
+    },
+    "cumulus_cvx": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "swp{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Cumulus VX",
+      "vendor": "cumulus",
+      "type": "switch",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 8080,
+          "path": "/",
+          "label": "NCLU"
+        }
+      ]
+    },
+    "nvidia_cumulusvx": {
+      "env": {
+        "VCPU": "2",
+        "RAM": "2048",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "swp{n}",
+        "count": 32
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Nvidia Cumulus VX",
+      "vendor": "cumulus",
+      "type": "switch",
+      "deploy_kind": "generic_vm",
+      "image_patterns": [
+        "nvidia_cumulusvx"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "aruba_aoscx": {
+      "env": {
+        "RAM": "8192",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "1/1/{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "AOS-CX",
+      "vendor": "aruba",
+      "type": "switch",
+      "mgmt_iface": "mgmt",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "AOS-CX UI"
+        }
+      ]
+    },
+    "sonic-vs": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet{i}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "SONiC VS",
+      "vendor": "sonic",
+      "type": "switch",
+      "mgmt_iface": "Management0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "SONiC UI"
+        }
+      ]
+    },
+    "sonic-vm": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet{i}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "SONiC VM",
+      "vendor": "sonic",
+      "type": "switch",
+      "mgmt_iface": "Management0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "SONiC UI"
+        }
+      ]
+    },
+    "dell_ftosv": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "ethernet1/1/{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "FTOS10v",
+      "vendor": "dell",
+      "type": "switch",
+      "mgmt_iface": "ManagementEthernet 0/0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "FTOS UI"
+        }
+      ]
+    },
+    "dell_sonic": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet{i}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Dell SONiC",
+      "vendor": "dell",
+      "type": "switch",
+      "mgmt_iface": "Management0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "Enterprise SONiC UI"
+        }
+      ]
+    },
+    "mikrotik_ros": {
+      "env": {
+        "RAM": "256",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "ether{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "RouterOS",
+      "vendor": "mikrotik",
+      "type": "router",
+      "mgmt_iface": "ether1",
+      "webui": [
+        {
+          "scheme": "http",
+          "port": 80,
+          "path": "/",
+          "label": "WebFig"
+        }
+      ]
+    },
+    "huawei_vrp": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet1/0/{i}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "VRP",
+      "vendor": "huawei",
+      "type": "router",
+      "mgmt_iface": "GigabitEthernet0/0/0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "Huawei WebUI"
+        }
+      ]
+    },
+    "ipinfusion_ocnos": {
+      "env": {
+        "RAM": "4096",
+        "VCPU": "2",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "OcNOS",
+      "vendor": "ipinfusion",
+      "type": "router",
+      "mgmt_iface": "eth0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "OcNOS UI"
+        }
+      ]
+    },
+    "paloalto_panos": {
+      "env": {
+        "RAM": "6144",
+        "VCPU": "2",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "Ethernet1/{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "PAN-OS",
+      "vendor": "paloalto",
+      "type": "firewall",
+      "mgmt_iface": "management",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "PAN-OS UI"
+        }
+      ]
+    },
+    "fortinet_fortigate": {
+      "env": {
+        "RAM": "2048",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "port{n}",
+        "count": 10
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "FortiGate",
+      "vendor": "fortinet",
+      "type": "firewall",
+      "mgmt_iface": "port1",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "FortiGate UI"
+        }
+      ]
+    },
+    "checkpoint_cloudguard": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "CloudGuard",
+      "vendor": "checkpoint",
+      "type": "firewall",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "SmartConsole Web"
+        }
+      ]
+    },
+    "6wind_vsr": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "infra-eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "6WIND VSR",
+      "vendor": "6wind",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "infra-eth0"
+    },
+    "keysight_ixia-c-one": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Ixia-c One",
+      "vendor": "keysight",
+      "type": "client",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 8443,
+          "path": "/",
+          "label": "Ixia-c API"
+        }
+      ]
+    },
+    "spirent_stc": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "TestCenter",
+      "vendor": "spirent",
+      "type": "client",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "arrcus_arcos": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "swp{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "ArcOS",
+      "vendor": "arrcus",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "fdio_vpp": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "VPP",
+      "vendor": "linux",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "rare": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "freeRtr",
+      "vendor": "linux",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "vyosnetworks_vyos": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "VyOS",
+      "vendor": "vyos",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "VyOS API"
+        }
+      ]
+    },
+    "veesix_osvbng": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "osvBNG",
+      "vendor": "veesix",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "generic_vm": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Generic VM",
+      "vendor": "generic",
+      "type": "server",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "linux": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Linux",
+      "vendor": "linux",
+      "type": "server",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "freebsd": {
+      "env": {
+        "RAM": "512",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "FreeBSD",
+      "vendor": "linux",
+      "type": "server",
+      "mgmt_iface": "eth0"
+    },
+    "openbsd": {
+      "env": {
+        "RAM": "512",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "OpenBSD",
+      "vendor": "linux",
+      "type": "server",
+      "mgmt_iface": "eth0"
+    },
+    "openwrt": {
+      "env": {
+        "RAM": "128",
+        "VCPU": "1",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "OpenWRT",
+      "vendor": "linux",
+      "type": "router",
+      "mgmt_iface": "mgmt",
+      "webui": [
+        {
+          "scheme": "http",
+          "port": 80,
+          "path": "/",
+          "label": "LuCI"
+        }
+      ]
+    },
+    "k8s-kind": {
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 4
+      },
+      "env": {
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "KinD",
+      "vendor": "linux",
+      "type": "cloud",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "bridge": {
+      "env": {
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Bridge",
+      "vendor": "linux",
+      "type": "switch",
+      "image_patterns": [
+        "not tested"
+      ]
+    },
+    "ovs-bridge": {
+      "env": {
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "OVS Bridge",
+      "vendor": "ovs",
+      "type": "switch",
+      "image_patterns": [
+        "not tested"
+      ]
+    },
+    "ext-container": {
+      "env": {
+        "CLAB_MGMT_PASSTHROUGH": "true",
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Ext-Cont",
+      "vendor": "linux",
+      "type": "server",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "juniper_apstra": {
+      "env": {
+        "RAM": "16384",
+        "VCPU": "4",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "Apstra",
+      "vendor": "juniper",
+      "type": "server",
+      "deploy_kind": "generic_vm",
+      "image_patterns": [
+        "juniper_apstra"
+      ],
+      "mgmt_iface": "eth0",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "WebUI"
+        }
+      ]
+    },
+    "host": {
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "env": {
+        "VCPU": "1",
+        "RAM": "2048"
+      },
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "host",
+      "vendor": "generic",
+      "type": "router",
+      "image_patterns": [
+        "not tested"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "frr": {
+      "env": {
+        "VCPU": "1",
+        "RAM": "2048",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "eth{n}",
+        "count": 8
+      },
+      "node_features": [
+        "frr_daemons"
+      ],
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "label": "FRR Routing",
+      "vendor": "linux",
+      "type": "router",
+      "deploy_kind": "linux",
+      "image_patterns": [
+        "frrouting",
+        "dnlab_frr"
+      ],
+      "mgmt_iface": "eth0"
+    },
+    "dnlab_opnsense": {
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "env": {
+        "VCPU": "2",
+        "RAM": "4096",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "vtnet{n}",
+        "count": 8
+      },
+      "label": "OPNsense",
+      "vendor": "opnsense",
+      "type": "firewall",
+      "deploy_kind": "freebsd",
+      "image_patterns": [
+        "dnlab_opnsense"
+      ],
+      "mgmt_iface": "mgmt",
+      "webui": [
+        {
+          "scheme": "https",
+          "port": 443,
+          "path": "/",
+          "label": "OPNsense WebUI"
+        }
+      ]
+    },
+    "cisco_vios_l2": {
+      "resources": {
+        "cpu": {
+          "source": "env",
+          "key": "VCPU",
+          "type": "int"
+        },
+        "ram_mb": {
+          "source": "env",
+          "key": "RAM",
+          "type": "int",
+          "unit": "mb"
+        }
+      },
+      "env": {
+        "VCPU": "1",
+        "RAM": "2048",
+        "CLAB_MGMT_PASSTHROUGH": "true"
+      },
+      "interfaces": {
+        "linux_fmt": "eth{n}",
+        "vendor_fmt": "GigabitEthernet{module}/{port}",
+        "count": 8
+      },
+      "label": "IOSvL2",
+      "vendor": "cisco",
+      "type": "switch",
+      "deploy_kind": "cisco_vios",
+      "image_patterns": [
+        "cisco_vios_l2_v2"
+      ],
+      "mgmt_iface": "GigabitEthernet0/0"
+    }
+  }
+}

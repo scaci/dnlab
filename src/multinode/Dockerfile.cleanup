@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1.7
+# Slim image for the dnlab-lab-cleanup daemon. The daemon performs all
+# docker/ip operations remotely over SSH (paramiko), so it needs no local
+# docker/iproute2/openssh-client packages and none of the FastAPI/uvicorn stack.
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /opt/dnlab-multinode
+
+COPY . .
+RUN pip wheel --no-cache-dir --wheel-dir /tmp/dnlab-wheels . \
+    && pip install --no-cache-dir --no-index --find-links /tmp/dnlab-wheels dnlab-multinode \
+    && rm -rf /tmp/dnlab-wheels
+
+CMD ["dnlab-lab-cleanup", "start"]

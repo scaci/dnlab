@@ -6,7 +6,7 @@
 
 > Build network labs on one node or across many, orchestrated automatically and transparently.
 
-![Release](https://img.shields.io/badge/release-0.1.0-blue)
+![Release](https://img.shields.io/badge/release-0.1.1-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)
 ![Images](https://img.shields.io/badge/images-GHCR-blue)
 
@@ -72,7 +72,7 @@ Public release packages are published as `ghcr.io/scaci/dnlab-*` container
 images and are linked to this public `scaci/dnlab` repository. The matching
 AGPL source archives are attached to the corresponding GitHub Release.
 
-Current release: `0.1.0`. The Compose stack requires `DNLAB_VERSION=0.1.0`
+Current release: `0.1.1`. The Compose stack requires `DNLAB_VERSION=0.1.1`
 in `.env`; this selects the published GHCR images for the release.
 
 The stack contains these Compose services:
@@ -88,6 +88,19 @@ The stack contains these Compose services:
 
 Images, binaries, log directories, TLS files and source artifacts keep their
 `dnlab-*` product names.
+
+## Repository Layout
+
+This repository is the canonical dNLab distribution source tree. Application
+sources live under `src/`:
+
+- `src/gui`: FastAPI GUI, static frontend, auth DB migrations and proxy assets.
+- `src/multinode`: orchestration API, CLI, cleanup daemon and runtime helper
+  image contexts.
+- `src/image-build`: image-build API and vrnetlab patch helpers.
+
+The root contains the distribution Compose files, LXC packaging helpers,
+release metadata and shared documentation.
 
 ## Deployment
 
@@ -168,8 +181,9 @@ platform.
 Open the GUI through the HTTPS proxy, seed the first administrator if this is a
 fresh install, and create or import labs from the browser. The backend uses the
 images selected by `DNLAB_VERSION`, `DNLAB_IMAGE_PREFIX` and
-`DNLAB_RUNTIME_IMAGE_PREFIX`; no local dNLab image build is part of the public
-installation flow.
+`DNLAB_RUNTIME_IMAGE_PREFIX`. Published GHCR images are the default install
+path; local image builds from the application sources under `src/` are
+documented in [ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md).
 
 ## Collaboration & RBAC
 

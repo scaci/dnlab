@@ -1,0 +1,48 @@
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent2); }
+
+/* ── M5: status badge animato ───────────────────────────────────────── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.status-badge .badge-text { line-height: 1; }
+
+/* Stati transient (deploy/destroy in corso) */
+.status-deploying  { background: #1e3a8a; color: #bfdbfe; }
+.status-destroying { background: #7f1d1d; color: #fecaca; }
+.status-error      { background: #7f1d1d; color: #fecaca; }
+[data-theme="light"] .status-deploying  { background: #dbeafe; color: #1e40af; }
+[data-theme="light"] .status-destroying { background: #fee2e2; color: #991b1b; }
+[data-theme="light"] .status-error      { background: #fee2e2; color: #991b1b; }
+
+.status-transient { animation: status-pulse 1.6s ease-in-out infinite; }
+
+.badge-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: spinner 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spinner {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+@keyframes sync-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+

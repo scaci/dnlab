@@ -1,0 +1,82 @@
+/* ── Reset & base ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── dNLab brand palette ──────────────────────────────────────────────
+   Primary navy:   #0A1628   (logo stroke / dark bg)
+   Surface light:  #FAFBFC   (logo inner / light bg)
+   Accent cyan:    #00B8D4   (logo dot / hover+active)
+   ────────────────────────────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --bg-deep:    #0A1628;
+  --bg-panel:   #0F1E33;
+  --bg-card:    #15293F;
+  --bg-hover:   #1F3B59;
+  --border:     #223A55;
+  --accent:     #00B8D4;
+  --accent2:    #0096B0;
+  --text:       #FAFBFC;
+  --text-muted: #8AA0B5;
+  --success:    #22c55e;
+  --warn:       #f59e0b;
+  --error:      #ef4444;
+  --toolbar-h:  48px;
+  --sidebar-w:  220px;
+  --props-w:    240px;
+  --console-h:  220px;
+  --console-bg: #0A1628;
+  --console-fg: #FAFBFC;
+  --workspace-bg:   var(--bg-deep);
+  --workspace-grid: #1e1e3a;
+  --sidebar-bg:     var(--bg-panel);
+  --sidebar-card:   var(--bg-card);
+  --sidebar-hover:  var(--bg-hover);
+  --footer-bg:      var(--bg-panel);
+}
+
+[data-theme="light"] {
+  --bg-deep:    #FAFBFC;
+  --bg-panel:   #FFFFFF;
+  --bg-card:    #F4F6F9;
+  --bg-hover:   #E6ECF2;
+  --border:     #D6DCE4;
+  --accent:     #00B8D4;
+  --accent2:    #0A1628;
+  --text:       #0A1628;
+  --text-muted: #5A6B7D;
+  --success:    #16a34a;
+  --warn:       #d97706;
+  --error:      #dc2626;
+  --console-bg: #0A1628;
+  --console-fg: #FAFBFC;
+  --workspace-bg:   #F4F0E8;
+  --workspace-grid: #D2CABD;
+  --sidebar-bg:     #F7F3EC;
+  --sidebar-card:   #FFFCF6;
+  --sidebar-hover:  #EEE7DC;
+  --footer-bg:      #F8F5EF;
+}
+
+/* Light theme button overrides */
+[data-theme="light"] .btn          { background: #fff; border-color: var(--border); color: var(--text); }
+[data-theme="light"] .btn:hover    { background: var(--bg-hover); border-color: var(--accent); }
+[data-theme="light"] .btn.active   { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+[data-theme="light"] .btn-start    { background: #dcfce7; border-color: #16a34a; color: #166534; }
+[data-theme="light"] .btn-start:hover { background: #bbf7d0; }
+[data-theme="light"] .btn-stop     { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+[data-theme="light"] .btn-stop:hover  { background: #fecaca; }
+[data-theme="light"] .btn-danger   { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+[data-theme="light"] .btn-danger:hover { background: #fecaca; }
+[data-theme="light"] .btn-primary  { background: var(--accent); border-color: var(--accent); color: #fff; }
+[data-theme="light"] .status-running { background: #dcfce7; color: #166534; }
+[data-theme="light"] .status-stopped { background: #fee2e2; color: #991b1b; }
+
+html, body { height: 100%; width: 100%; overflow: hidden; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  background: var(--bg-deep);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}

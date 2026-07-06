@@ -1,0 +1,38 @@
+name: triangle
+
+# ── Jumphost (per-lab) ──────────────────────────────────────────────
+# Each lab gets its own jumphost container. The jumphost network is
+# shared infrastructure (hosts.yml → infrastructure.jumphost_net);
+# the IP is auto-assigned from the pool at deploy time.
+jumphost:
+  image: dnlab/jumphost:latest
+
+# ── Management network (shared across all hosts via VxLAN + VRF) ────
+# Optional: if omitted, defaults from /etc/dnlab/hosts.yml apply
+# and network/bridge are auto-generated from the topology name.
+mgmt:
+  network: mgmt-triangle
+  bridge: br-triangle-mgmt
+  ipv4-subnet: 172.20.0.0/24
+  ipv4-gw: 172.20.0.1
+
+# ── Virtual Devices ─────────────────────────────────────────────────
+topology:
+  nodes:
+    R1:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:latest
+      mgmt-ipv4: 172.20.0.11
+    R2:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:latest
+      mgmt-ipv4: 172.20.0.12
+    R3:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:latest
+      mgmt-ipv4: 172.20.0.13
+
+  links:
+    - endpoints: [ "R1:e1-1", "R2:e1-1" ]
+    - endpoints: [ "R2:e1-2", "R3:e1-1" ]
+    - endpoints: [ "R3:e1-2", "R1:e1-2" ]

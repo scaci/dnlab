@@ -1,0 +1,162 @@
+#modal-overlay .modal:has(.rabbit-modal) {
+  width: 720px;
+  max-width: 95vw;
+}
+
+.rabbit-modal {
+  min-width: 0;
+}
+
+.rabbit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rabbit-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.rabbit-grid .props-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.rabbit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.rabbit-sessions {
+  display: grid;
+  gap: 8px;
+}
+
+.rabbit-session {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-bg, transparent);
+}
+
+.rabbit-session > div {
+  min-width: 0;
+}
+
+.rabbit-session strong,
+.rabbit-session span {
+  overflow-wrap: anywhere;
+}
+
+.rabbit-progress {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+  max-width: 360px;
+}
+
+.rabbit-progress-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.rabbit-progress-fill {
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #22d3ee, #e879f9);
+  transition: width 180ms ease;
+}
+
+.rabbit-progress-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.rabbit-dot-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.rabbit-dot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #facc15;
+  border-radius: 50%;
+  background: #fff7ad;
+  box-shadow:
+    0 0 8px rgba(250, 204, 21, 0.95),
+    0 0 18px rgba(250, 204, 21, 0.72);
+  will-change: transform;
+}
+
+/* Forward leg (src -> dst): cyan. */
+.rabbit-dot--forward {
+  border-color: #22d3ee;
+  background: #cffafe;
+  box-shadow:
+    0 0 8px rgba(34, 211, 238, 0.95),
+    0 0 18px rgba(34, 211, 238, 0.72);
+}
+
+/* Return leg (dst -> src): magenta. */
+.rabbit-dot--return {
+  border-color: #e879f9;
+  background: #fae8ff;
+  box-shadow:
+    0 0 8px rgba(232, 121, 249, 0.95),
+    0 0 18px rgba(232, 121, 249, 0.72);
+}
+
+/* Session-list legend matching the animated dot colours. */
+.rabbit-leg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 10px;
+}
+
+.rabbit-leg::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.rabbit-leg--forward::before {
+  background: #22d3ee;
+  box-shadow: 0 0 6px rgba(34, 211, 238, 0.8);
+}
+
+.rabbit-leg--return::before {
+  background: #e879f9;
+  box-shadow: 0 0 6px rgba(232, 121, 249, 0.8);
+}
+
+@media (max-width: 720px) {
+  .rabbit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rabbit-session {
+    grid-template-columns: 1fr;
+  }
+}

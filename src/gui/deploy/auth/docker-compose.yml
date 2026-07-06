@@ -1,0 +1,34 @@
+# Postgres backing store for dnlab-gui auth (M7 fase 2).
+#
+# Bind su 127.0.0.1 soltanto: la GUI gira sul master e si connette via
+# loopback. No accesso remoto — in futuro (M8 containerizzazione)
+# will remain in the same compose network as the GUI.
+#
+# Volume persistente nominato: i dati sopravvivono a `docker compose
+# down`. Rimuovere con `docker volume rm dnlab-auth_pgdata` solo se
+# si vuole wipe totale del DB users.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dnlab-auth-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-dnlab_auth}
+      POSTGRES_USER:     ${POSTGRES_USER:-dnlab_gui}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATA:            /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dnlab_gui} -d ${POSTGRES_DB:-dnlab_auth}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  pgdata:
+    name: dnlab-auth_pgdata

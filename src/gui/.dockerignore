@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.git/
+.codex
+*.bak
+*.bak.*
+*.log
+deploy/auth/.env

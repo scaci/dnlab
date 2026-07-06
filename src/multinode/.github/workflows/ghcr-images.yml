@@ -1,0 +1,108 @@
+name: GHCR images
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Push image to GHCR
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  push:
+    branches:
+      - main
+      - plus
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: scaci
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: dnlab-multinode
+            image: dnlab-multinode
+            dockerfile: Dockerfile
+          - name: dnlab-lab-cleanup
+            image: dnlab-lab-cleanup
+            dockerfile: Dockerfile.cleanup
+          - name: dnlab-jumphost
+            image: dnlab-jumphost
+            dockerfile: jumphost/Dockerfile
+            context: jumphost
+          - name: dnlab-dns
+            image: dnlab-dns
+            dockerfile: dns/Dockerfile
+            context: dns
+          - name: dnlab-runtime-relay
+            image: dnlab-runtime-relay
+            dockerfile: runtime-relay/Dockerfile
+            context: runtime-relay
+          - name: dnlab-realnet-router
+            image: dnlab-realnet-router
+            dockerfile: realnet-router/Dockerfile
+            context: realnet-router
+          - name: dnlab-realnet-rr
+            image: dnlab-realnet-rr
+            dockerfile: realnet-rr/Dockerfile
+            context: realnet-rr
+          - name: dnlab-mgmt-anchor
+            image: dnlab-mgmt-anchor
+            dockerfile: mgmt-anchor/Dockerfile
+            context: mgmt-anchor
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.name }}
+            org.opencontainers.image.source=https://github.com/scaci/dnlab
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=plus,enable=${{ github.ref == 'refs/heads/plus' }}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,prefix=sha-
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context || '.' }}
+          file: ${{ matrix.dockerfile }}
+          push: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') }}
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          provenance: false

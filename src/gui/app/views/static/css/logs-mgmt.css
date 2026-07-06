@@ -1,0 +1,54 @@
+/* ── Log panel (tab + content) ───────────────────────────────────────── */
+.log-tab { border-left: 2px solid #22c55e; }
+
+.log-container {
+  position: absolute;
+  inset: 0;
+  overflow-y: scroll;
+  padding: 6px 10px;
+  background: var(--bg-deep);
+  font-family: 'Fira Mono', 'Cascadia Code', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #ccc;
+  padding: 1px 0;
+}
+.log-line:hover    { background: rgba(255,255,255,0.04); }
+.log-line-warn     { color: var(--warn); }
+.log-line-err      { color: var(--error); }
+
+#mgmt-panel {
+  padding: 8px 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.mgmt-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding-top: 6px;
+  line-height: 1.4;
+}
+.mgmt-hint code {
+  font-size: 10px;
+  background: var(--panel-bg, transparent);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+.mgmt-bridge-preview {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 2px 0 6px;
+}
+.mgmt-bridge-preview code {
+  color: var(--text);
+  background: var(--panel-bg, transparent);
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 11px;
+}
+

@@ -1,0 +1,120 @@
+/* ── Login overlay ────────────────────────────────────────────────── */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 22, 40, 0.85);
+  backdrop-filter: blur(4px);
+}
+.login-card {
+  width: min(400px, 92vw);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  padding: 28px 28px 24px;
+}
+.login-header {
+  text-align: center;
+  margin-bottom: 18px;
+}
+.login-brand {
+  width: 48px; height: 48px;
+  margin-bottom: 8px;
+}
+.login-header h1 {
+  font-size: 18px;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.login-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.login-form label {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.login-form input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.login-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 184, 212, 0.25);
+}
+.btn-block {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 0;
+}
+.login-error {
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* ── User badge in toolbar ────────────────────────────────────────── */
+.user-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+.user-badge-name { color: var(--text); font-weight: 500; }
+.user-badge-role {
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.user-badge-role.role-admin    { background: #fbbf24; color: #7c2d12; }
+.user-badge-role.role-graduate { background: #60a5fa; color: #0b1d3a; }
+.user-badge-role.role-assistant { background: #a78bfa; color: #241044; }
+.user-badge-role.role-student  { background: #86efac; color: #064e3b; }
+.user-badge-role.role-rookie   { background: #d1d5db; color: #1f2937; }
+
+/* ── Read-only tag in Open dialog ─────────────────────────────────── */
+.ro-tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: 8px;
+}
+
+/* ── Disabled write buttons (read-only lab) ───────────────────────── */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}

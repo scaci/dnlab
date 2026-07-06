@@ -1,0 +1,47 @@
+/* ── Centre: canvas + console ────────────────────────────────────────── */
+#centre-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+#cy {
+  flex: 1;
+  position: relative;
+  background: var(--workspace-bg);
+  background-image:
+    radial-gradient(circle, var(--workspace-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Drop-zone highlight */
+#cy.drag-over { outline: 2px dashed var(--accent); }
+
+.canvas-realnet-tip {
+  position: fixed;
+  z-index: 1200;
+  pointer-events: none;
+  max-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre-line;
+}
+
+.canvas-realnet-tip-dark {
+  background: #111827;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.canvas-realnet-tip-light {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.45);
+}

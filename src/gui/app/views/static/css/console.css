@@ -1,0 +1,156 @@
+/* ── Console panel ───────────────────────────────────────────────────── */
+#console-panel {
+  height: 0;
+  overflow: hidden;
+  background: var(--bg-deep);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transition: height 0.25s ease;
+}
+#console-panel.visible { height: var(--console-h); }
+
+#console-tabs {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 0 4px;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.console-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: var(--bg-card);
+  border-radius: 3px 3px 0 0;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-bottom: none;
+}
+.console-tab.active { background: var(--bg-deep); border-color: var(--accent); }
+.tab-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 10px; line-height: 1; }
+.tab-close:hover { color: var(--error); }
+
+#console-term-area {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+.xterm-container {
+  position: absolute;
+  inset: 0;
+  padding: 4px;
+}
+
+/* ── Console popup windows ───────────────────────────────────────────── */
+.console-popup {
+  position: fixed;
+  width: 700px;
+  height: 420px;
+  min-width: 320px;
+  min-height: 200px;
+  background: var(--bg-deep);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  resize: both;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.console-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.console-popup-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.console-popup-close {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 8px;
+  z-index: 10;
+  position: relative;
+  flex-shrink: 0;
+}
+.console-popup-close:hover { background: var(--error); color: #fff; }
+
+.console-popup-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 4px;
+  background: var(--console-bg);
+}
+.console-popup-body .xterm {
+  height: 100%;
+}
+
+/* ── Interface picker modal ──────────────────────────────────────────── */
+#modal-overlay .modal:has(.iface-picker) { width: 560px; max-width: 95vw; }
+.iface-picker {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: center;
+  padding: 10px 0;
+}
+.iface-picker-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.iface-picker-col select {
+  width: 100%;
+  min-width: 0;
+}
+.iface-picker-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--accent);
+  text-align: center;
+}
+.iface-picker-arrow {
+  font-size: 22px;
+  color: var(--text-muted);
+  padding-top: 20px;
+  flex: 0 0 auto;
+}
+
+/* ── Logs popup body ─────────────────────────────────────────────────── */
+.logs-popup-body {
+  overflow-y: auto;
+  padding: 6px 10px;
+  font-family: 'Fira Mono', 'Cascadia Code', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--console-fg);
+  background: var(--console-bg);
+}
+

@@ -1,0 +1,212 @@
+#!/bin/bash
+#
+# vd <command> [options]
+#
+# Unified jumphost helper for Virtual Devices:
+#   vd list
+#   vd connect <vd_name>
+#   vd log <vd_name>
+#   vd log -f <vd_name>
+#   vd help
+
+set -eu
+
+RC_NO_RELAY=42
+VD_LIST_FILE="${VD_LIST_FILE:-/etc/dnlab-vds}"
+VD_RELAY_FILE="${VD_RELAY_FILE:-/etc/dnlab-relays}"
+
+usage() {
+    cat <<EOF
+Usage:
+  vd list
+  vd connect <VD>
+  vd log [-f] <VD>
+  vd help
+
+Commands:
+  vd list             → Show the available VDs in this lab
+  vd connect <name>   → Open the serial console of the VD
+  vd log <name>       → Display the logs of the VD
+  vd log -f <name>    → Show the live logs of the VD
+  vd help             → Show this help
+
+Examples:
+  vd list
+  vd connect clab-triangle-r1
+  vd log clab-triangle-r1
+  vd log -f clab-triangle-r1
+EOF
+}
+
+die_usage() {
+    usage >&2
+    exit 1
+}
+
+vd_names() {
+    if [ -n "${JUMPHOST_VD_LIST:-}" ]; then
+        local -a configured_names
+        read -r -a configured_names <<< "$JUMPHOST_VD_LIST"
+        printf '%s\n' "${configured_names[@]}"
+    elif [ -f "$VD_LIST_FILE" ]; then
+        while IFS= read -r item; do
+            [ -n "$item" ] || continue
+            printf '%s\n' "${item%%=*}"
+        done < "$VD_LIST_FILE"
+    fi
+    return 0
+}
+
+resolve_vd_target() {
+    name="$1"
+    if [ -n "${JUMPHOST_VD_MAP:-}" ]; then
+        local -a mappings
+        read -r -a mappings <<< "$JUMPHOST_VD_MAP"
+        for item in "${mappings[@]}"; do
+            key="${item%%=*}"
+            value="${item#*=}"
+            if [ "$key" = "$name" ]; then
+                printf '%s\n' "$value"
+                return 0
+            fi
+        done
+    fi
+    if [ -f "$VD_LIST_FILE" ]; then
+        while IFS= read -r item; do
+            [ -n "$item" ] || continue
+            key="${item%%=*}"
+            value="${item#*=}"
+            if [ "$key" = "$name" ]; then
+                printf '%s\n' "$value"
+                return 0
+            fi
+        done < "$VD_LIST_FILE"
+    fi
+    printf '%s\n' "$name"
+}
+
+resolve_relay_target() {
+    container="$1"
+    [ -r "$VD_RELAY_FILE" ] || return 1
+    while IFS= read -r item; do
+        [ -n "$item" ] || continue
+        key="${item%%=*}"
+        value="${item#*=}"
+        if [ "$key" = "$container" ]; then
+            printf '%s\n' "$value"
+            return 0
+        fi
+    done < "$VD_RELAY_FILE"
+    return 1
+}
+
+cmd_list() {
+    names="$(vd_names)"
+    if [ -z "$names" ]; then
+        echo "vd: No VD configured on this jumphost"
+        return 0
+    fi
+    printf '%s\n' "$names"
+}
+
+run_relay_connect() {
+    container="$1"
+    relay="$2"
+    host="${relay%%:*}"
+    rest="${relay#*:}"
+    port="${rest%%:*}"
+    api_key="${rest#*:}"
+    exec vd-relay-client connect "$host" "$port" "$api_key" "$container"
+}
+
+run_relay_log() {
+    container="$1"
+    relay="$2"
+    tail="$3"
+    follow="$4"
+    host="${relay%%:*}"
+    rest="${relay#*:}"
+    port="${rest%%:*}"
+    api_key="${rest#*:}"
+    exec vd-relay-client log "$host" "$port" "$api_key" "$container" "$tail" "$follow"
+}
+
+missing_relay() {
+    name="$1"
+    target="$2"
+    echo "vd: no runtime relay is configured for '$name' ($target)." >&2
+    echo "    Redeploy or restart the lab runtime infrastructure, then try again." >&2
+    return "$RC_NO_RELAY"
+}
+
+cmd_connect() {
+    if [ $# -ne 1 ]; then
+        die_usage
+    fi
+
+    name="$1"
+    target="$(resolve_vd_target "$name")"
+    if relay="$(resolve_relay_target "$target")"; then
+        run_relay_connect "$target" "$relay"
+        exit "$?"
+    fi
+    missing_relay "$name" "$target"
+    exit "$?"
+}
+
+cmd_log() {
+    follow=0
+    if [ "${1:-}" = "-f" ]; then
+        follow=1
+        shift
+    fi
+    if [ $# -ne 1 ]; then
+        die_usage
+    fi
+
+    name="$1"
+    target="$(resolve_vd_target "$name")"
+    if relay="$(resolve_relay_target "$target")"; then
+        if [ "$follow" = "1" ]; then
+            run_relay_log "$target" "$relay" 200 1
+        else
+            run_relay_log "$target" "$relay" all 0
+        fi
+        exit "$?"
+    fi
+    missing_relay "$name" "$target"
+    exit "$?"
+}
+
+if [ $# -lt 1 ]; then
+    die_usage
+fi
+
+case "$1" in
+    list)
+        shift
+        if [ $# -ne 0 ]; then
+            die_usage
+        fi
+        cmd_list
+        ;;
+    connect)
+        shift
+        cmd_connect "$@"
+        ;;
+    log)
+        shift
+        cmd_log "$@"
+        ;;
+    help|--help|-h)
+        shift || true
+        if [ $# -ne 0 ]; then
+            die_usage
+        fi
+        usage
+        ;;
+    *)
+        echo "vd: unknown command '$1'" >&2
+        die_usage
+        ;;
+esac

@@ -1,0 +1,181 @@
+#props-panel {
+  padding: 12px 10px;
+  flex-shrink: 0;
+}
+
+.props-modal-panel {
+  min-width: min(520px, 76vw);
+  max-width: 680px;
+}
+
+.props-modal-panel #props-panel,
+.props-modal-panel {
+  padding: 0;
+}
+
+.props-title { font-size: 13px; font-weight: 700; margin-bottom: 12px; color: var(--accent); }
+.props-empty { color: var(--text-muted); font-size: 12px; padding-top: 8px; }
+
+.props-form { display: flex; flex-direction: column; gap: 8px; }
+.props-form label { font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px; }
+.props-form .hidden { display: none; }
+.props-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+}
+.props-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  margin: 0;
+}
+.props-fieldset legend {
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 0 4px;
+}
+.props-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px;
+}
+.props-segmented label {
+  display: block;
+  min-width: 0;
+}
+.props-segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.props-segmented span {
+  display: block;
+  text-align: center;
+  padding: 5px 6px;
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+.props-segmented input:checked + span {
+  background: var(--accent);
+  color: #061014;
+}
+.props-input {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 5px 7px;
+  font-size: 12px;
+  font-family: 'Fira Mono', monospace;
+  width: 100%;
+}
+.props-input:focus { outline: none; border-color: var(--accent); }
+.props-input.readonly { color: var(--text-muted); cursor: not-allowed; }
+.props-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.props-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.props-yaml {
+  min-height: 150px;
+  resize: vertical;
+  line-height: 1.35;
+  white-space: pre;
+}
+.node-override {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.node-override legend {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.props-actions { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+
+.running-info { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.info-row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
+
+/* ── Web UI ports (Properties) ───────────────────────────────────── */
+.webui-ports {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.webui-ports legend {
+  font-size: 11px;
+  color: var(--accent);
+  padding: 0 4px;
+  font-weight: 600;
+}
+.webui-muted { font-size: 11px; color: var(--text-muted); margin: 0; }
+
+.webui-defaults { display: flex; flex-direction: column; gap: 3px; }
+.webui-default-row { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.webui-pill {
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-family: 'Fira Mono', monospace;
+  font-size: 10px;
+  color: #fff;
+}
+.webui-pill-https { background: #22863a; }
+.webui-pill-http  { background: #d97706; }
+.webui-label { color: var(--text-muted); }
+
+/* Annotazione runtime → master:<host_port> oppure (pending) prima del deploy */
+.webui-host-port {
+  font-family: 'Fira Mono', monospace;
+  font-size: 10px;
+  color: #9c9;
+}
+.webui-pending {
+  font-family: 'Fira Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.webui-row-runtime { grid-column: 1 / -1; padding-left: 4px; }
+
+.webui-custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.webui-custom-row {
+  display: grid;
+  grid-template-columns: 70px 70px 1fr 1fr 28px;
+  gap: 4px;
+  align-items: center;
+}
+.webui-custom-row .props-input { padding: 4px 6px; font-size: 11px; }
+.webui-remove { padding: 2px 6px; }
+
+/* Context-menu: sottotitolo small-caps per la voce Web UI */
+.cm-item .cm-subtle {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: 'Fira Mono', monospace;
+}

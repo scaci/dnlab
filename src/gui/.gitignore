@@ -1,0 +1,28 @@
+# Python
+venv/
+.wheelhouse/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+
+# Runtime
+*.log
+
+# Local tooling / backups
+.codex
+*.bak
+*.bak.*
+docs/*
+!docs/node-kind-plugins.md
+
+# OS
+.DS_Store
+
+# Auth secrets (M7 fase 2) — never commit the generated password
+deploy/auth/.env

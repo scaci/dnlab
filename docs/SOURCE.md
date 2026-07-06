@@ -12,8 +12,8 @@ same tag.
 
 For example:
 
-- Image: `ghcr.io/scaci/dnlab-gui:0.1.0`
-- Source: release `v0.1.0`, artifact `dnlab-gui-0.1.0-source.tar.gz`
+- Image: `ghcr.io/scaci/dnlab-gui:0.1.1`
+- Source: release `v0.1.1`, artifact `dnlab-gui-0.1.1-source.tar.gz`
 
 The corresponding source archive must include the application source,
 Dockerfiles, build scripts, release metadata and configuration needed to build,
@@ -58,12 +58,14 @@ private operational repositories to be made public.
 
 Some releases also include a ready-made Proxmox LXC template published as an
 OCI artifact on GitHub Container Registry, for example
-`ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0`. The template is a distribution binary;
+`ghcr.io/scaci/dnlab-lxc-proxmox:0.1.1`. The template is a distribution binary;
 it is not committed to this repository.
 
-The public reproducible sources for that template are the files under `lxc/`
-plus the tagged dNLab distribution files copied into `/opt/dnlab` inside the
-template. The LXC template does not replace the per-image AGPL source archives
-listed above; those remain the corresponding source for the GHCR images used by
-the stack. The same LXC files may be attached to the GitHub Release as a
-browser-friendly mirror, but GHCR is the canonical registry location.
+The public reproducible sources for that template are the files under `lxc/`,
+the root distribution files (`compose*.yml`, `.env.example`, `preflight.sh`,
+`smoke.sh`) and the application sources under `src/`, all copied into
+`/opt/dnlab` inside the template. The LXC template does not replace the
+per-image AGPL source archives listed above; those remain the corresponding
+source for the GHCR images used by the stack. The same LXC files may be
+attached to the GitHub Release as a browser-friendly mirror, but GHCR is the
+canonical registry location.

@@ -1,0 +1,50 @@
+name: demo
+
+# ── Jumphost (per-lab) ──────────────────────────────────────────────
+# Each lab gets its own jumphost container. The jumphost network is
+# shared infrastructure (hosts.yml → infrastructure.jumphost_net);
+# the IP is auto-assigned from the pool at deploy time.
+jumphost:
+  image: dnlab/jumphost:latest
+
+# ── Management network (shared across all hosts via VxLAN + VRF) ────
+# Optional: if omitted, defaults from /etc/dnlab/hosts.yml apply
+# and network/bridge are auto-generated from the topology name.
+mgmt:
+  network: mgmt-demo
+  bridge: br-demo-mgmt
+  ipv4-subnet: 172.20.0.0/24
+  ipv4-gw: 172.20.0.1
+
+# ── Virtual Devices ─────────────────────────────────────────────────
+topology:
+  nodes:
+    NX1:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv_v2:9300-10.5.5.M
+      mgmt-ipv4: 172.20.0.11
+      env:
+        CLAB_MGMT_PASSTHROUGH: "true"
+        CLAB_MGMT_DHCP: "true"
+
+    NX2:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv_v2:9300-10.5.5.M
+      mgmt-ipv4: 172.20.0.12
+      env:
+        CLAB_MGMT_PASSTHROUGH: "true"
+        CLAB_MGMT_DHCP: "true"
+
+    tor:
+      kind: juniper_vjunosswitch
+      mgmt-ipv4: 172.20.0.200
+      image: vrnetlab/juniper_vjunos-switch:25.4R1.12
+      env:
+        CLAB_MGMT_PASSTHROUGH: "true"
+        CLAB_MGMT_DHCP: "true"
+
+  links:
+  - endpoints: ['NX1:eth9', 'NX2:eth9']
+  - endpoints: ['NX1:eth10', 'NX2:eth10']
+  - endpoints: ['NX1:eth1', 'tor:ge-0/0/0']
+  - endpoints: ['NX2:eth1', 'tor:ge-0/0/1']

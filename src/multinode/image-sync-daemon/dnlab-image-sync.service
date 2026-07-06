@@ -1,0 +1,25 @@
+[Unit]
+Description=dNLab Multinode Image Sync
+Documentation=https://github.com/scaci/dnlab-multinode
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/opt/dnlab/src/multinode/venv/bin/dnlab-image-sync start
+Restart=on-failure
+RestartSec=10
+
+# The daemon writes its state snapshot here. Group-readable so the GUI
+# (running as its own user) can poll the file without sudo.
+StateDirectory=dnlab-image-sync
+StateDirectoryMode=0755
+
+# Reasonable defaults for a long-running orchestrator daemon.
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

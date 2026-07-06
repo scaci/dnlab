@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>dNLab — distributed Network Labs</title>
+  <link rel="icon" type="image/svg+xml" href="/img/brand/09-favicon-64.svg">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+</head>
+<body>
+
+<!-- ── Toolbar ─────────────────────────────────────────────────────── -->
+<div id="toolbar">
+  <a class="brand" href="/" title="dNLab — distributed Network Labs">
+    <img class="brand-mark brand-mark-dark"  src="/img/brand/06-mark-dark.svg"  alt="dNLab">
+    <img class="brand-mark brand-mark-light" src="/img/brand/05-mark-light.svg" alt="dNLab">
+    <span class="brand-text">dNLab</span>
+  </a>
+  <div class="toolbar-sep"></div>
+
+  <button id="btn-new"    class="btn" title="New topology">+ New</button>
+  <button id="btn-open"   class="btn" title="Open topology">📂 Open</button>
+
+  <div class="toolbar-sep"></div>
+
+  <button id="btn-import-drawio" class="btn" title="Importa da draw.io XML">⬆ Import draw.io</button>
+  <button id="btn-export-drawio" class="btn" title="Esporta in draw.io XML">⬇ Export draw.io</button>
+
+  <div class="toolbar-sep"></div>
+
+  <button id="btn-mode-select" class="btn active" title="Selection mode (V)">↖ Select</button>
+  <button id="btn-mode-link"   class="btn"        title="Link mode (L)">🔗 Link</button>
+
+  <div class="toolbar-sep"></div>
+
+  <button id="btn-deploy"  class="btn btn-start" title="Start lab">▶ Start</button>
+  <button id="btn-destroy" class="btn btn-stop"  title="Ferma lab">■ Stop</button>
+  <button id="btn-delete-topo" class="btn btn-danger" title="Delete topology and persistent data">✕ Delete</button>
+
+  <div class="toolbar-sep"></div>
+
+  <button id="btn-fit"    class="btn" title="Adatta schermo">⊞ Fit</button>
+  <button id="btn-toggle-mgmt" class="btn active" title="Show/nascondi mgmt cloud e link">🌐 Mgmt</button>
+  <button id="btn-follow-rabbit" class="btn btn-follow-rabbit" title="follow-the-rabbit">follow-the-rabbit</button>
+  <button id="btn-delete" class="btn btn-danger btn-sm" title="Delete selected items">🗑</button>
+
+  <div class="toolbar-sep"></div>
+
+  <span id="topo-name-display">(no topology)</span>
+  <span id="lab-status-badge" class="status-badge status-stopped">stopped</span>
+
+  <span id="jumphost-box" class="jumphost-box"></span>
+
+  <div class="toolbar-spacer"></div>
+
+  <span id="user-badge" class="user-badge" title="Current user"></span>
+  <div id="view-switch" class="view-switch" hidden>
+    <button id="view-labs" class="view-switch-btn active" type="button">Labs</button>
+    <button id="view-admin" class="view-switch-btn" type="button">Admin</button>
+  </div>
+  <button id="btn-logout" class="btn btn-sm" title="Logout">⎋ Logout</button>
+
+  <select id="theme-select" class="theme-select" title="Tema">
+    <option value="dark">🌙 Dark</option>
+    <option value="light">☀️ Light</option>
+  </select>
+</div>
+
+<div id="lab-view" class="app-view active">
+
+<!-- ── Main area ────────────────────────────────────────────────────── -->
+<div id="main-area">
+
+  <!-- Sidebar: palette devices -->
+  <aside id="sidebar-shell">
+    <div id="sidebar-header">
+      <span id="sidebar-title">Devices</span>
+      <button id="sidebar-toggle" class="events-btn" type="button" title="Hide/mostra devices">‹</button>
+    </div>
+    <div id="sidebar"></div>
+  </aside>
+
+  <!-- Centre: canvas + pannello inferiore -->
+  <div id="centre-area">
+    <div id="cy"></div>
+
+    <!-- Pannello inferiore: console + log (condiviso) -->
+    <div id="console-panel">
+      <div id="console-tabs"></div>
+      <div id="console-term-area"></div>
+    </div>
+  </div>
+  <div id="props-panel" hidden></div>
+  <div id="mgmt-panel" hidden></div>
+</div>
+
+<!-- ── Events footer (fuori da #main-area: pinnato in fondo al viewport) ── -->
+<div id="events-footer" class="collapsed"></div>
+
+</div>
+
+<div id="admin-view" class="app-view" hidden></div>
+
+<!-- ── Context menu ──────────────────────────────────────────────────── -->
+<div id="context-menu"></div>
+
+<!-- ── Modal ────────────────────────────────────────────────────────── -->
+<div id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header" id="modal-title"></div>
+    <div class="modal-body"   id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- ── Toasts ────────────────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── Libraries ────────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+
+<!-- ── Moduli applicazione ──────────────────────────────────────────── -->
+<script src="/js/api.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/device_catalog.js"></script>
+<script src="/js/node_override_plugins.js"></script>
+<script src="/js/node_plugins/cat9kv_vswitch.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/window_manager.js"></script>
+<script src="/js/canvas.js"></script>
+<script src="/js/sidebar.js"></script>
+<script src="/js/toolbar.js"></script>
+<script src="/js/properties.js"></script>
+<script src="/js/console.js"></script>
+<script src="/js/logs.js"></script>
+<script src="/js/events.js"></script>
+<script src="/js/context_menu.js"></script>
+<script src="/js/capture_modal.js"></script>
+<script src="/js/follow_rabbit_modal.js"></script>
+<script src="/js/mgmt_panel.js"></script>
+<script src="/js/plan_modal.js"></script>
+<script src="/js/image_sync_modal.js"></script>
+<script src="/js/users_modal.js"></script>
+<script src="/js/jumphost_box.js"></script>
+<script src="/js/admin_page.js"></script>
+<script src="/js/app.js"></script>
+
+	<!-- ── Keyboard shortcuts & theme ────────────────────────────────────── -->
+	<script>
+	  document.addEventListener('keydown', e => {
+	    if (document.getElementById('admin-view')?.classList.contains('active')) return;
+	    if (e.ctrlKey && e.key === 's') { e.preventDefault(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && document.activeElement === document.body)
+      document.getElementById('btn-delete')?.click();
+    if (e.key === 'v' || e.key === 'V') document.getElementById('btn-mode-select')?.click();
+    if (e.key === 'l' || e.key === 'L') document.getElementById('btn-mode-link')?.click();
+    if ((e.key === 'm' || e.key === 'M') && !_isTypingTarget(e.target)) {
+      e.preventDefault();
+      Toolbar.toggleMgmtVisible?.();
+    }
+    if ((e.key === 'n' || e.key === 'N') && !_isTypingTarget(e.target)) {
+      e.preventDefault();
+      Canvas.toggleRealNetInfoVisible?.();
+    }
+  });
+  function _isTypingTarget(el) {
+    if (!el) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+  }
+  document.getElementById('modal-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) hideModal();
+  });
+
+  // Theme switcher
+  (() => {
+    const sel = document.getElementById('theme-select');
+    const saved = localStorage.getItem('dnlab-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    sel.value = saved;
+    sel.addEventListener('change', () => {
+      const theme = sel.value;
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('dnlab-theme', theme);
+      if (typeof Canvas !== 'undefined') Canvas.setTheme(theme);
+    });
+  })();
+</script>
+</body>
+</html>
