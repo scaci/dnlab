@@ -68,14 +68,13 @@ OCI artifact on GitHub Container Registry, for example
 `ghcr.io/scaci/dnlab-lxc-proxmox:0.1.1`. The template is a distribution binary;
 it is not committed to this repository.
 
-The public reproducible sources for that template are the files under `lxc/`,
-the root distribution files (`compose*.yml`, `.env.example`, `preflight.sh`,
-`smoke.sh`) and the application sources under `src/`, all copied into
-`/opt/dnlab` inside the template. The LXC template does not replace the
-per-image AGPL source archives listed above; those remain the corresponding
-source for the GHCR images used by the stack. The same LXC files may be
-attached to the GitHub Release as a browser-friendly mirror, but GHCR is the
-canonical registry location.
+The LXC template build and first-boot helper code is internal release
+orchestration and is not committed to this public repository. The template
+includes the public dNLab distribution tree copied into `/opt/dnlab`; the
+per-image AGPL source archives listed above remain the corresponding source for
+the GHCR images used by the stack. The Proxmox helper assets needed to install
+the template are attached to the GitHub Release as a browser-friendly mirror,
+while GHCR is the canonical registry location.
 
 The template is also expected to include
 `/usr/share/doc/dnlab/third-party/`, containing the Debian package inventory,

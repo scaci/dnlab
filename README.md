@@ -99,8 +99,10 @@ sources live under `src/`:
   image contexts.
 - `src/image-build`: image-build API and vrnetlab patch helpers.
 
-The root contains the distribution Compose files, LXC packaging helpers,
-release metadata and shared documentation.
+The root contains the distribution Compose files, release metadata and shared
+documentation. Proxmox LXC template packaging is an internal release process;
+the published template and Proxmox helper assets are distributed through GHCR
+and the matching GitHub Release.
 
 ## Deployment
 
