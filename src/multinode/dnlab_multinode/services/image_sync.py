@@ -145,8 +145,8 @@ def filter_images(
     """
     def _matches(name: str, patterns: list[str]) -> bool:
         # A pattern without ``:`` or a glob wildcard is treated as matching
-        # any tag — e.g. ``dnlab/runtime-relay`` matches
-        # ``dnlab/runtime-relay:latest``.
+        # any tag — e.g. ``dnlab-runtime-relay`` matches
+        # ``dnlab-runtime-relay:latest``.
         for p in patterns:
             if fnmatch.fnmatchcase(name, p):
                 return True

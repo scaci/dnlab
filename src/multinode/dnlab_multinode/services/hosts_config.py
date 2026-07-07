@@ -37,8 +37,8 @@ File schema::
 
     image_sync:          # optional, used by the image-sync daemon
       enabled: true
-      include: ["vrnetlab/*", "dnlab/runtime-relay", "dnlab/mgmt-anchor"]
-      exclude: ["dnlab/jumphost", "dnlab/dns",
+      include: ["vrnetlab/*", "dnlab-runtime-relay", "dnlab-mgmt-anchor"]
+      exclude: ["dnlab-jumphost", "dnlab-dns",
                 "postgres", "<none>:<none>"]
       interval_seconds: 300
 
@@ -132,10 +132,10 @@ class ImageSyncConfig:
     include: list[str] = field(default_factory=lambda: ["*"])
     exclude: list[str] = field(
         default_factory=lambda: [
-            "dnlab/jumphost",
-            "dnlab/dns",
-            "dnlab/realnet-router",
-            "dnlab/realnet-rr",
+            "dnlab-jumphost",
+            "dnlab-dns",
+            "dnlab-realnet-router",
+            "dnlab-realnet-rr",
             "postgres",
             "<none>:<none>",
         ]

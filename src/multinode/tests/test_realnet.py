@@ -226,19 +226,19 @@ def test_realnet_rr_defaults_to_latest_image(monkeypatch, topo_factory):
 
     commands = _deploy_rr_for_image_test(topo_factory)
 
-    assert any("docker image inspect dnlab/realnet-rr:latest" in cmd for cmd in commands)
-    assert any(cmd.endswith("dnlab/realnet-rr:latest") for cmd in commands)
+    assert any("docker image inspect dnlab-realnet-rr:latest" in cmd for cmd in commands)
+    assert any(cmd.endswith("dnlab-realnet-rr:latest") for cmd in commands)
 
 
 def test_realnet_rr_uses_release_image(monkeypatch, topo_factory):
     monkeypatch.setenv("DNLAB_VERSION", "0.1.0")
-    monkeypatch.setenv("DNLAB_RUNTIME_IMAGE_PREFIX", "dnlab/")
+    monkeypatch.setenv("DNLAB_RUNTIME_IMAGE_PREFIX", "dnlab-")
 
     commands = _deploy_rr_for_image_test(topo_factory)
 
-    assert any("docker image inspect dnlab/realnet-rr:0.1.0" in cmd for cmd in commands)
-    assert any(cmd.endswith("dnlab/realnet-rr:0.1.0") for cmd in commands)
-    assert not any("dnlab/realnet-rr:latest" in cmd for cmd in commands)
+    assert any("docker image inspect dnlab-realnet-rr:0.1.0" in cmd for cmd in commands)
+    assert any(cmd.endswith("dnlab-realnet-rr:0.1.0") for cmd in commands)
+    assert not any("dnlab-realnet-rr:latest" in cmd for cmd in commands)
 
 
 def test_realnet_router_veth_name_is_unique_per_lab():

@@ -53,10 +53,10 @@ image_sync:
   enabled: true
   include:
     - "vrnetlab/*"
-    - "dnlab/runtime-relay"
+    - "dnlab-runtime-relay"
   exclude:
-    - "dnlab/jumphost"
-    - "dnlab/dns"
+    - "dnlab-jumphost"
+    - "dnlab-dns"
     - "postgres"
     - "<none>:<none>"
   interval_seconds: 300

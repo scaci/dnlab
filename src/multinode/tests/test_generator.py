@@ -296,7 +296,7 @@ def test_mgmt_anchor_topology_owns_full_mgmt_section(topo_factory):
     assert parsed["mgmt"]["ipv4-gw"] == (topo.mgmt.docker_ipv4_gw or topo.mgmt.ipv4_gw)
     node = parsed["topology"]["nodes"]["mgmt-anchor"]
     assert node["kind"] == "linux"
-    assert node["image"] == "dnlab/mgmt-anchor:latest"
+    assert node["image"] == "dnlab-mgmt-anchor:latest"
     assert node["mgmt-ipv4"] == "172.20.0.252"
     assert node["env"]["CLAB_MGMT_PASSTHROUGH"] == "true"
 

@@ -10,7 +10,8 @@ import os
 
 
 DEFAULT_DNLAB_VERSION = "latest"
-DEFAULT_IMAGE_PREFIX = "dnlab/"
+LOCAL_RUNTIME_IMAGE_PREFIX = "dnlab-"
+RUNTIME_IMAGE_SUFFIX = "dnlab-"
 
 COMPONENTS = {
     "jumphost": "jumphost",
@@ -27,7 +28,13 @@ def dnlab_version() -> str:
 
 
 def dnlab_image_prefix() -> str:
-    return (os.getenv("DNLAB_RUNTIME_IMAGE_PREFIX") or DEFAULT_IMAGE_PREFIX).strip()
+    runtime_prefix = (os.getenv("DNLAB_RUNTIME_IMAGE_PREFIX") or "").strip()
+    if runtime_prefix:
+        return runtime_prefix
+    image_prefix = (os.getenv("DNLAB_IMAGE_PREFIX") or "").strip()
+    if image_prefix:
+        return f"{image_prefix}{RUNTIME_IMAGE_SUFFIX}"
+    return LOCAL_RUNTIME_IMAGE_PREFIX
 
 
 def image_for(component: str) -> str:

@@ -5,7 +5,7 @@ name: demo
 # shared infrastructure (hosts.yml → infrastructure.jumphost_net);
 # the IP is auto-assigned from the pool at deploy time.
 jumphost:
-  image: dnlab/jumphost:latest
+  image: dnlab-jumphost:latest
 
 # ── Management network (shared across all hosts via VxLAN + VRF) ────
 # Optional: if omitted, defaults from /etc/dnlab/hosts.yml apply

@@ -92,39 +92,39 @@ def test_parse_docker_images_skips_dangling_and_empty():
         "vrnetlab/xr:25.2\tsha256:aaa\n"
         "<none>:<none>\tsha256:bbb\n"
         "\n"
-        "dnlab/runtime-relay:latest\tsha256:ccc\n"
+        "dnlab-runtime-relay:latest\tsha256:ccc\n"
         "custom/image:<none>\tsha256:ddd\n"
     )
     out = isync._parse_docker_images(raw)
     assert out == {
         "vrnetlab/xr:25.2": "sha256:aaa",
-        "dnlab/runtime-relay:latest": "sha256:ccc",
+        "dnlab-runtime-relay:latest": "sha256:ccc",
     }
 
 
 def test_filter_images_include_then_exclude():
     cfg = ImageSyncConfig(
         enabled=True,
-        include=["vrnetlab/*", "dnlab/runtime-relay"],
+        include=["vrnetlab/*", "dnlab-runtime-relay"],
         exclude=["vrnetlab/secret*"],
         interval_seconds=60,
     )
     images = {
         "vrnetlab/xr:1.0":                  "sha:a",
         "vrnetlab/secret-thing:1.0":        "sha:b",
-        "dnlab/runtime-relay:latest":"sha:c",
-        "dnlab/jumphost:latest":   "sha:d",   # not in include
+        "dnlab-runtime-relay:latest":"sha:c",
+        "dnlab-jumphost:latest":   "sha:d",   # not in include
         "random/other:1":                   "sha:e",
     }
     out = isync.filter_images(images, cfg)
-    assert set(out) == {"vrnetlab/xr:1.0", "dnlab/runtime-relay:latest"}
+    assert set(out) == {"vrnetlab/xr:1.0", "dnlab-runtime-relay:latest"}
 
 
 def test_default_image_sync_keeps_worker_aux_images_and_excludes_postgres():
     cfg = ImageSyncConfig()
     images = {
-        "dnlab/runtime-relay:latest": "sha:rr",
-        "dnlab/mgmt-anchor:latest": "sha:ma",
+        "dnlab-runtime-relay:latest": "sha:rr",
+        "dnlab-mgmt-anchor:latest": "sha:ma",
         "postgres:16-alpine": "sha:a",
         "postgres:17-alpine": "sha:b",
         "vrnetlab/xr:1.0": "sha:c",
@@ -133,8 +133,8 @@ def test_default_image_sync_keeps_worker_aux_images_and_excludes_postgres():
     out = isync.filter_images(images, cfg)
 
     assert set(out) == {
-        "dnlab/runtime-relay:latest",
-        "dnlab/mgmt-anchor:latest",
+        "dnlab-runtime-relay:latest",
+        "dnlab-mgmt-anchor:latest",
         "vrnetlab/xr:1.0",
     }
 

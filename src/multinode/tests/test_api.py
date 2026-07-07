@@ -187,7 +187,7 @@ def test_realnet_rr_status_endpoint_uses_hosts_status(monkeypatch):
     monkeypatch.setattr(
         api,
         "_realnet_rr_status_from_hosts",
-        lambda hosts_file: {"running": True, "container": "dnlab-realnet-rr", "image": "dnlab/realnet-rr:latest"},
+        lambda hosts_file: {"running": True, "container": "dnlab-realnet-rr", "image": "dnlab-realnet-rr:latest"},
     )
     monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
 

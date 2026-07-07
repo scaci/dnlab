@@ -57,6 +57,4 @@ fi
 
 echo "[bootstrap] dnlab-gui ready. Start with:"
 echo "  $VENV/bin/python3 $ROOT/run.py"
-echo "or via systemd:"
-echo "  systemctl start dnlab-gui"
-echo "For the Docker target, start the compose stack from /root/dnlab-dev-docs/docker."
+echo "For the Docker target, start or rebuild the compose stack from /opt/dnlab."

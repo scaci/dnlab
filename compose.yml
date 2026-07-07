@@ -1,7 +1,7 @@
 name: dnlab
 services:
   proxy:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-proxy:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_IMAGE_PREFIX:?set DNLAB_IMAGE_PREFIX in .env}dnlab-proxy:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     depends_on:
       gui:
         condition: service_healthy
@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
 
   gui:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_IMAGE_PREFIX:?set DNLAB_IMAGE_PREFIX in .env}dnlab-gui:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     command: ["sh", "-c", "alembic upgrade head && python run.py"]
     depends_on:
       auth-db:
@@ -44,7 +44,7 @@ services:
       DNLAB_MULTINODE_API_URL: http://multinode:8081
       DNLAB_IMAGE_BUILD_API_URL: http://image-build:8082
       DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
-      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}
+      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}
       DNLAB_MULTINODE_HOSTS: /etc/dnlab/hosts.yml
       TOPOLOGIES_DIR: ${DNLAB_TOPOLOGIES_DIR:-/root/dnlab-topologies}
       DNLABGUI_ALLOWED_ORIGINS: ${DNLABGUI_ALLOWED_ORIGINS:-https://${DNLAB_PROXY_SERVER_NAME:?set DNLAB_PROXY_SERVER_NAME}}
@@ -74,7 +74,7 @@ services:
     restart: unless-stopped
 
   auth-seed:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-gui:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_IMAGE_PREFIX:?set DNLAB_IMAGE_PREFIX in .env}dnlab-gui:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - seed-admin
     depends_on:
@@ -123,14 +123,14 @@ services:
     restart: unless-stopped
 
   multinode:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_IMAGE_PREFIX:?set DNLAB_IMAGE_PREFIX in .env}dnlab-multinode:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     privileged: true
     environment:
       DNLAB_MULTINODE_API_HOST: 0.0.0.0
       DNLAB_MULTINODE_API_PORT: "8081"
       DNLAB_IMAGE_SYNC_API_URL: http://image-sync:8083
       DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
-      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}
+      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}
     volumes:
       - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
       - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
@@ -151,7 +151,7 @@ services:
     restart: unless-stopped
 
   image-sync:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-multinode:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_IMAGE_PREFIX:?set DNLAB_IMAGE_PREFIX in .env}dnlab-multinode:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     command: ["dnlab-image-sync", "start"]
     depends_on:
       - multinode
@@ -160,7 +160,7 @@ services:
       DNLAB_IMAGE_SYNC_API_HOST: 0.0.0.0
       DNLAB_IMAGE_SYNC_API_PORT: "8083"
       DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
-      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}
+      DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}
     volumes:
       - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
       - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro
@@ -177,7 +177,7 @@ services:
     restart: unless-stopped
 
   lab-cleanup:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-lab-cleanup:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_IMAGE_PREFIX:?set DNLAB_IMAGE_PREFIX in .env}dnlab-lab-cleanup:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     depends_on:
       - multinode
     volumes:
@@ -201,7 +201,7 @@ services:
     restart: unless-stopped
 
   image-build:
-    image: ${DNLAB_IMAGE_PREFIX:-ghcr.io/scaci/}dnlab-image-build:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_IMAGE_PREFIX:?set DNLAB_IMAGE_PREFIX in .env}dnlab-image-build:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     environment:
       DNLAB_IMAGE_BUILD_API_HOST: 0.0.0.0
       DNLAB_IMAGE_BUILD_API_PORT: "8082"
@@ -220,7 +220,7 @@ services:
     restart: unless-stopped
 
   release-jumphost-image:
-    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}jumphost:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}jumphost:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
     entrypoint: ["sh", "-c", "exit 0"]
@@ -228,7 +228,7 @@ services:
     restart: "no"
 
   release-dns-image:
-    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}dns:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}dns:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
     entrypoint: ["sh", "-c", "exit 0"]
@@ -236,7 +236,7 @@ services:
     restart: "no"
 
   release-runtime-relay-image:
-    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}runtime-relay:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}runtime-relay:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
     entrypoint: ["sh", "-c", "exit 0"]
@@ -244,7 +244,7 @@ services:
     restart: "no"
 
   release-realnet-router-image:
-    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}realnet-router:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}realnet-router:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
     entrypoint: ["sh", "-c", "exit 0"]
@@ -252,7 +252,7 @@ services:
     restart: "no"
 
   release-realnet-rr-image:
-    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}realnet-rr:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}realnet-rr:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
     entrypoint: ["sh", "-c", "exit 0"]
@@ -260,7 +260,7 @@ services:
     restart: "no"
 
   release-mgmt-anchor-image:
-    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:-ghcr.io/scaci/dnlab-}mgmt-anchor:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
+    image: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}mgmt-anchor:${DNLAB_VERSION:?set DNLAB_VERSION in .env}
     profiles:
       - release-images
     entrypoint: ["sh", "-c", "exit 0"]

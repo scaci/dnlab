@@ -166,8 +166,8 @@ cat <<EOF
   hosts:   ${TARGETS[*]}
 
 Next steps:
-  - Restart dnlab-gui so app.config picks up the new key:
-      systemctl restart dnlab-gui
+  - Restart the GUI service so app.config picks up the new key:
+      docker compose -f /opt/dnlab/compose.yml restart gui
   - Verify console works: open any VD console in the GUI.
   - To rotate later: re-run with --force.
 EOF
