@@ -385,26 +385,14 @@ DNLAB_IMAGE_PREFIX=dnlab-local/
 DNLAB_RUNTIME_IMAGE_PREFIX=dnlab-local/dnlab-
 ```
 
-Build the application images:
+Build the application and runtime helper images through the local-build Compose
+override. The final image names still come from `compose.yml` and the `.env`
+prefix/version variables above; `--profile release-images` only includes the
+runtime helper build targets and is not used for the normal `up` command.
 
 ```bash
 cd /opt/dnlab
-docker build -t dnlab-local/dnlab-gui:local -f src/gui/Dockerfile src/gui
-docker build -t dnlab-local/dnlab-proxy:local -f src/gui/deploy/apache/Dockerfile src/gui
-docker build -t dnlab-local/dnlab-multinode:local -f src/multinode/Dockerfile src/multinode
-docker build -t dnlab-local/dnlab-lab-cleanup:local -f src/multinode/Dockerfile.cleanup src/multinode
-docker build -t dnlab-local/dnlab-image-build:local -f src/image-build/Dockerfile src/image-build
-```
-
-Build the runtime helper images used later by lab orchestration:
-
-```bash
-docker build -t dnlab-jumphost:latest -f src/multinode/jumphost/Dockerfile src/multinode/jumphost
-docker build -t dnlab-dns:latest -f src/multinode/dns/Dockerfile src/multinode/dns
-docker build -t dnlab-runtime-relay:latest -f src/multinode/runtime-relay/Dockerfile src/multinode/runtime-relay
-docker build -t dnlab-realnet-router:latest -f src/multinode/realnet-router/Dockerfile src/multinode/realnet-router
-docker build -t dnlab-realnet-rr:latest -f src/multinode/realnet-rr/Dockerfile src/multinode/realnet-rr
-docker build -t dnlab-mgmt-anchor:latest -f src/multinode/mgmt-anchor/Dockerfile src/multinode/mgmt-anchor
+docker compose -f compose.yml -f compose.local-build.yml --profile release-images build
 ```
 
 After the images exist locally, start the same Compose stack without the
@@ -627,6 +615,28 @@ images are not built locally during installation; preload them with:
 
 ```bash
 docker compose -f compose.yml --profile release-images pull
+```
+
+Configure the minimal image-sync filter in `/etc/dnlab/hosts.yml` so workers
+receive all `vrnetlab/*` virtual-device images plus the runtime helper images
+needed by lab orchestration. Helper names without an explicit tag match all
+tags, for example `dnlab-runtime-relay` matches `dnlab-runtime-relay:latest`.
+
+```yaml
+image_sync:
+  enabled: true
+  include:
+    - "vrnetlab/*"
+    - "dnlab-runtime-relay"
+    - "dnlab-mgmt-anchor"
+  exclude:
+    - "dnlab-jumphost"
+    - "dnlab-dns"
+    - "dnlab-realnet-router"
+    - "dnlab-realnet-rr"
+    - "postgres"
+    - "<none>:<none>"
+  interval_seconds: 300
 ```
 
 ## Lab Cleanup Reconciler

@@ -1,0 +1,55 @@
+services:
+  proxy:
+    build:
+      context: ./src/gui
+      dockerfile: deploy/apache/Dockerfile
+
+  gui:
+    build:
+      context: ./src/gui
+      dockerfile: Dockerfile
+
+  multinode:
+    build:
+      context: ./src/multinode
+      dockerfile: Dockerfile
+
+  lab-cleanup:
+    build:
+      context: ./src/multinode
+      dockerfile: Dockerfile.cleanup
+
+  image-build:
+    build:
+      context: ./src/image-build
+      dockerfile: Dockerfile
+
+  release-jumphost-image:
+    build:
+      context: ./src/multinode/jumphost
+      dockerfile: Dockerfile
+
+  release-dns-image:
+    build:
+      context: ./src/multinode/dns
+      dockerfile: Dockerfile
+
+  release-runtime-relay-image:
+    build:
+      context: ./src/multinode/runtime-relay
+      dockerfile: Dockerfile
+
+  release-realnet-router-image:
+    build:
+      context: ./src/multinode/realnet-router
+      dockerfile: Dockerfile
+
+  release-realnet-rr-image:
+    build:
+      context: ./src/multinode/realnet-rr
+      dockerfile: Dockerfile
+
+  release-mgmt-anchor-image:
+    build:
+      context: ./src/multinode/mgmt-anchor
+      dockerfile: Dockerfile

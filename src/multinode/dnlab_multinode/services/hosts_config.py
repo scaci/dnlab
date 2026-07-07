@@ -39,6 +39,7 @@ File schema::
       enabled: true
       include: ["vrnetlab/*", "dnlab-runtime-relay", "dnlab-mgmt-anchor"]
       exclude: ["dnlab-jumphost", "dnlab-dns",
+                "dnlab-realnet-router", "dnlab-realnet-rr",
                 "postgres", "<none>:<none>"]
       interval_seconds: 300
 

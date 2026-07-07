@@ -54,6 +54,7 @@ image_sync:
   include:
     - "vrnetlab/*"
     - "dnlab-runtime-relay"
+    - "dnlab-mgmt-anchor"
   exclude:
     - "dnlab-jumphost"
     - "dnlab-dns"
