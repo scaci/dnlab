@@ -146,6 +146,32 @@ CephFS-backed persistence is an experimental option and has not been validated
 for production use. Treat it as a lab feature until it is explicitly tested in
 your environment.
 
+## Tested Images
+
+The following virtual-device images have been tested with dNLab.
+
+| Image name | Version | Test result |
+| --- | --- | --- |
+| `cisco_c9800cl_v2` | `17.15.05` | Interfaces are enumerated incorrectly; image works |
+| `cisco_cat9kv_v2` | `17.15.03` | OK |
+| `cisco_n9kv_v2` | `9300-10.3.9.M` | OK |
+| `cisco_n9kv_v2` | `9300-10.5.5.M` | OK |
+| `cisco_n9kv_v2` | `9500-10.5.5.M` | OK |
+| `cisco_vios_l2_v2` | `L2-20200929` | OK |
+| `cisco_vios_v2` | `adventerprisek9-m.spa.159-3.m10` | OK |
+| `cisco_xrv9k_v2` | `25.2.2` | OK |
+| `dnlab_frr` | `10.6.1` | OK |
+| `dnlab_opnsense` | `26.1.6` | OK |
+| `juniper_apstra` | `6.1.2-28` | OK |
+| `juniper_vjunos-router_v2` | `25.2R1.9` | Disk reports an error; after reboot it starts but takes longer |
+| `juniper_vjunos-router_v2` | `25.4R1.12` | Shutdown must be performed from Junos; otherwise the disk is reported as corrupted after reboot. Juniper image bug. Image works |
+| `juniper_vjunos-switch_v2` | `25.4R1.12` | OK |
+| `juniper_vjunosevolved_v2` | `25.4R1.13-EVO` | OK |
+| `mikrotik_routeros` | `7.22.2-amd64` | OK |
+| `mikrotik_routeros` | `7.22.2` | OK |
+| `nvidia_cumulusvx` | `5.16.1-vx-amd64` | OK |
+| `openwrt_openwrt_v2` | `25.12.2` | OK |
+
 ## Architecture
 
 A user submits a topology to the dNLab orchestrator. The orchestrator schedules
