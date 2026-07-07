@@ -707,10 +707,10 @@ The project is removed automatically unless `DNLAB_PREFLIGHT_KEEP=1` is set.
 Before upgrading, back up the auth DB:
 
 ```bash
-mkdir -p auth-db-dumps
+sudo install -d -m 0700 /var/backups/dnlab/auth-db
 docker compose -f compose.yml exec -T auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' \
-  > auth-db-dumps/dnlab_auth_before_upgrade.sql
+  | sudo sh -c 'umask 077; cat > /var/backups/dnlab/auth-db/dnlab_auth_before_upgrade.sql'
 ```
 
 Pull the full release image set selected by `.env`, then recreate the internal
@@ -742,8 +742,8 @@ lab_cleanup:
 ## Backup And Restore
 
 Use `pg_dump` and `psql` for the auth database. Keep dumps outside images and
-outside git. The local `auth-db-dumps/` directory is ignored for operator
-artifacts.
+outside git. Store local operator backups under `/var/backups/dnlab/auth-db`
+or another protected path outside the source checkout.
 
 Restore is an operator action, not a Docker build step. Stop the GUI before
 restoring, reset the target schema, load the dump, restart through the proxy and
@@ -755,7 +755,7 @@ docker compose -f compose.yml exec -T auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "drop schema public cascade; create schema public;"'
 docker compose -f compose.yml exec -T auth-db sh -lc \
   'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
-  < auth-db-dumps/dnlab_auth_restore.sql
+  < /var/backups/dnlab/auth-db/dnlab_auth_restore.sql
 docker compose -f compose.yml up -d proxy
 COMPOSE_FILES=compose.yml \
 DNLAB_SMOKE_PROXY_URL=https://localhost:8443/ \

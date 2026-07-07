@@ -1,5 +1,12 @@
 .env
-auth-db-dumps/
+
+# Local-only workspace data and caches
+.local/
+.cache/
+tmp/
+temp/
+
+# Sensitive/runtime artifacts
 *.sql
 *.dump
 *.log
@@ -9,17 +16,16 @@ auth-db-dumps/
 *.csr
 *.p12
 *.pfx
-letsencrypt/
+
+# Build artifacts
 dist/
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+venv/
+.venv/
 src/*/venv/
 src/*/.venv/
 src/*/.pytest_cache/
 src/*/*.egg-info/
-/scripts/release_ghcr.py
-/scripts/release_ghcr.md
-/scripts/release_sources.py
-/scripts/release_sources.md
-/docs/release_ghcr.md
-/docs/release_sources.md
