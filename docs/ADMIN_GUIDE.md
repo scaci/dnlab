@@ -399,12 +399,12 @@ docker build -t dnlab-local/dnlab-image-build:local -f src/image-build/Dockerfil
 Build the runtime helper images used later by lab orchestration:
 
 ```bash
-docker build -t dnlab-local/dnlab-jumphost:local -f src/multinode/jumphost/Dockerfile src/multinode/jumphost
-docker build -t dnlab-local/dnlab-dns:local -f src/multinode/dns/Dockerfile src/multinode/dns
-docker build -t dnlab-local/dnlab-runtime-relay:local -f src/multinode/runtime-relay/Dockerfile src/multinode/runtime-relay
-docker build -t dnlab-local/dnlab-realnet-router:local -f src/multinode/realnet-router/Dockerfile src/multinode/realnet-router
-docker build -t dnlab-local/dnlab-realnet-rr:local -f src/multinode/realnet-rr/Dockerfile src/multinode/realnet-rr
-docker build -t dnlab-local/dnlab-mgmt-anchor:local -f src/multinode/mgmt-anchor/Dockerfile src/multinode/mgmt-anchor
+docker build -t dnlab-jumphost:latest -f src/multinode/jumphost/Dockerfile src/multinode/jumphost
+docker build -t dnlab-dns:latest -f src/multinode/dns/Dockerfile src/multinode/dns
+docker build -t dnlab-runtime-relay:latest -f src/multinode/runtime-relay/Dockerfile src/multinode/runtime-relay
+docker build -t dnlab-realnet-router:latest -f src/multinode/realnet-router/Dockerfile src/multinode/realnet-router
+docker build -t dnlab-realnet-rr:latest -f src/multinode/realnet-rr/Dockerfile src/multinode/realnet-rr
+docker build -t dnlab-mgmt-anchor:latest -f src/multinode/mgmt-anchor/Dockerfile src/multinode/mgmt-anchor
 ```
 
 After the images exist locally, start the same Compose stack without the
