@@ -41,6 +41,7 @@ from dnlab_multinode.services.lab_cleanup import (
 )
 from dnlab_multinode.services import state as state_svc
 from dnlab_multinode.services.config import parse_topology
+from dnlab_multinode.services.logging_config import setup_service_logging
 from dnlab_multinode.services.paths import PATHS, persist_dir_for_node
 from dnlab_multinode.services.persistence import placement_file_path
 from dnlab_multinode.services.progress import ProgressEvent
@@ -816,6 +817,10 @@ def _host(host, *, is_master: bool) -> dict[str, Any]:
 def main() -> None:
     import uvicorn
 
+    setup_service_logging(
+        service="multinode",
+        filename="dnlab-multinode.log",
+    )
     uvicorn.run(
         "dnlab_multinode.api:app",
         host=os.getenv("DNLAB_MULTINODE_API_HOST", "127.0.0.1"),

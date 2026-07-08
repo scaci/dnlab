@@ -9,8 +9,7 @@ HTTPS_PORT="${DNLAB_PREFLIGHT_HTTPS_PORT:-18443}"
 PROXY_SERVER_NAME="${DNLAB_PREFLIGHT_PROXY_SERVER_NAME:-localhost}"
 TLS_DIR="${DNLAB_PREFLIGHT_TLS_DIR:-/tmp/dnlab-pre-tls}"
 TOPO_DIR="${DNLAB_PREFLIGHT_TOPO_DIR:-/tmp/dnlab-pre-topologies}"
-LOG_GUI_DIR="${DNLAB_PREFLIGHT_LOG_GUI_DIR:-/tmp/dnlab-pre-log-gui}"
-LOG_MULTINODE_DIR="${DNLAB_PREFLIGHT_LOG_MULTINODE_DIR:-/tmp/dnlab-pre-log-multinode}"
+LOG_ROOT="${DNLAB_PREFLIGHT_LOG_ROOT:-/tmp/dnlab-pre-log-root}"
 IMAGE_BUILD_WORKSPACE="${DNLAB_PREFLIGHT_IMAGE_BUILD_WORKSPACE:-/tmp/dnlab-pre-image-build}"
 POSTGRES_PASSWORD="${DNLAB_PREFLIGHT_POSTGRES_PASSWORD:-dnlab-preflight-password}"
 ADMIN_USERNAME="${DNLAB_PREFLIGHT_ADMIN_USERNAME:-preflightadmin}"
@@ -24,8 +23,7 @@ compose() {
   DNLAB_PROXY_HTTPS_PORT="$HTTPS_PORT" \
   DNLAB_PROXY_TLS_DIR="$TLS_DIR" \
   DNLAB_TOPOLOGIES_DIR="$TOPO_DIR" \
-  DNLAB_LOG_DIR_GUI="$LOG_GUI_DIR" \
-  DNLAB_LOG_DIR_MULTINODE="$LOG_MULTINODE_DIR" \
+  DNLAB_LOG_ROOT="$LOG_ROOT" \
   DNLAB_IMAGE_BUILD_WORKSPACE="$IMAGE_BUILD_WORKSPACE" \
   docker compose -p "$PROJECT" -f compose.yml "$@"
 }
@@ -37,7 +35,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$TOPO_DIR" "$LOG_GUI_DIR" "$LOG_MULTINODE_DIR" "$IMAGE_BUILD_WORKSPACE" "$TLS_DIR"
+mkdir -p "$TOPO_DIR" "$LOG_ROOT" "$IMAGE_BUILD_WORKSPACE" "$TLS_DIR"
 if [ ! -f "${TLS_DIR}/dnlab-gui.crt" ] || [ ! -f "${TLS_DIR}/dnlab-gui.key" ]; then
   openssl req -x509 -nodes -newkey rsa:2048 -days 7 \
     -keyout "${TLS_DIR}/dnlab-gui.key" \
@@ -64,8 +62,7 @@ DNLAB_PROXY_HTTP_PORT="$HTTP_PORT" \
 DNLAB_PROXY_HTTPS_PORT="$HTTPS_PORT" \
 DNLAB_PROXY_TLS_DIR="$TLS_DIR" \
 DNLAB_TOPOLOGIES_DIR="$TOPO_DIR" \
-DNLAB_LOG_DIR_GUI="$LOG_GUI_DIR" \
-DNLAB_LOG_DIR_MULTINODE="$LOG_MULTINODE_DIR" \
+DNLAB_LOG_ROOT="$LOG_ROOT" \
 DNLAB_IMAGE_BUILD_WORKSPACE="$IMAGE_BUILD_WORKSPACE" \
 docker compose -p "$PROJECT" -f compose.yml --profile seed-admin run --rm auth-seed
 

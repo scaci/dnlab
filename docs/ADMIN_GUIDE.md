@@ -104,8 +104,7 @@ persist_root: /var/lib/docker/dnlab-backups
 topologies_dir: /root/dnlab-topologies
 ssh_key: /root/.ssh/id_ed25519_github_dnlab
 ssh_gui_key: /root/.ssh/dnlab-gui.key
-log_dir_multinode: /var/log/dnlab-multinode
-log_dir_gui: /var/log/dnlab-gui
+log_root: /var/log/dnlab
 tmp_dir: /tmp
 containerlab_bin: /usr/bin/containerlab
 docker_socket: unix:///var/run/docker.sock
@@ -119,8 +118,8 @@ Common host directories:
 
 ```bash
 sudo mkdir -p /etc/dnlab /root/dnlab-topologies \
-  /var/lib/docker/dnlab-backups /var/log/dnlab-gui \
-  /var/log/dnlab-multinode /var/lib/dnlab-image-build /opt/vrnetlab
+  /var/lib/docker/dnlab-backups /var/log/dnlab \
+  /var/lib/dnlab-image-build /opt/vrnetlab
 ```
 
 `/opt/vrnetlab` must contain the dNLab vrnetlab tree used by
@@ -182,7 +181,7 @@ Create `.env` from `.env.example` and set a strong database password before
 starting the stack. At minimum, set:
 
 ```text
-DNLAB_VERSION=0.1.1
+DNLAB_VERSION=0.1.2
 POSTGRES_PASSWORD=<long random value>
 DNLAB_PROXY_SERVER_NAME=<gui-hostname>
 DNLAB_PROXY_HTTPS_PORT=<https-port>
@@ -202,7 +201,7 @@ DNLABGUI_ALLOWED_ORIGINS=https://localhost:8443
 
 Important settings:
 
-- `DNLAB_VERSION`: image tag. For this release, use `DNLAB_VERSION=0.1.1`.
+- `DNLAB_VERSION`: image tag. For this release, use `DNLAB_VERSION=0.1.2`.
 - `DNLAB_IMAGE_PREFIX`: image registry prefix, normally `ghcr.io/scaci/`.
 - `DNLAB_RUNTIME_IMAGE_PREFIX`: runtime image prefix, normally
   `ghcr.io/scaci/dnlab-`.
@@ -211,9 +210,8 @@ Important settings:
 - `DNLAB_PROXY_SERVER_NAME`: public GUI hostname; also drives Apache wildcard aliases and the GUI Web UI suffix.
 - `DNLABGUI_ALLOWED_ORIGINS`: browser-facing origin for CORS and WebSocket
   origin checks.
-- `DNLAB_TOPOLOGIES_DIR`, `DNLAB_PERSIST_ROOT`, `DNLAB_LOG_DIR_GUI`,
-  `DNLAB_LOG_DIR_MULTINODE`, `DNLAB_IMAGE_BUILD_WORKSPACE`: host-side storage
-  and log directories.
+- `DNLAB_TOPOLOGIES_DIR`, `DNLAB_PERSIST_ROOT`, `DNLAB_LOG_ROOT`,
+  `DNLAB_IMAGE_BUILD_WORKSPACE`: host-side storage and log directories.
 
 Do not keep real bootstrap admin passwords in `.env`; export them only for the
 single seed command.
@@ -436,9 +434,9 @@ an idempotent first-boot configurator.
    configurator can generate a new local self-signed certificate for test
    deployments.
 5. Verify `/etc/dnlab/hosts.yml` and `/etc/dnlab/paths.yml`. The generated
-   `paths.yml` should include both
-   `ssh_key: /root/.ssh/id_ed25519_github_dnlab` and
-   `ssh_gui_key: /root/.ssh/dnlab-gui.key`.
+   `paths.yml` should include `ssh_key: /root/.ssh/id_ed25519_github_dnlab`,
+   `ssh_gui_key: /root/.ssh/dnlab-gui.key` and
+   `log_root: /var/log/dnlab`.
 6. Optionally preload runtime helper images with
    `docker compose -f compose.yml --profile release-images pull`; use that
    profile for pulls only.
@@ -727,10 +725,16 @@ Pull the full release image set selected by `.env`, then recreate the internal
 services and proxy:
 
 ```bash
-grep '^DNLAB_VERSION=0.1.1$' .env
+grep '^DNLAB_VERSION=0.1.2$' .env
 docker compose -f compose.yml --profile release-images pull
-docker compose -f compose.yml up -d --force-recreate multinode lab-cleanup image-build gui proxy
+docker compose -f compose.yml up -d --force-recreate multinode image-sync lab-cleanup image-build gui proxy auth-db
 ```
+
+For the `0.1.2` logging migration, replace any old per-service logging entries
+with `log_root: /var/log/dnlab`. Use `DNLAB_LOG_ROOT` only if the host-side log
+root must differ from `/var/log/dnlab`. See
+`docs/RELEASE_NOTES_0.1.2.md` for the legacy key names and one-time migration
+checklist.
 
 Run guardrails:
 

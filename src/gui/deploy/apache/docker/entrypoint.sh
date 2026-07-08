@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+export APACHE_LOG_DIR="${APACHE_LOG_DIR:-/var/log/apache2}"
+mkdir -p "$APACHE_LOG_DIR"
+
 if [ "${DNLAB_PROXY_MODE:-tls}" = "tls" ]; then
     : "${DNLAB_PROXY_SERVER_NAME:?set DNLAB_PROXY_SERVER_NAME for tls mode}"
     export DNLAB_PROXY_WEBUI_SUFFIX="${DNLAB_PROXY_WEBUI_SUFFIX:-$DNLAB_PROXY_SERVER_NAME}"

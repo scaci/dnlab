@@ -3,44 +3,23 @@
 from __future__ import annotations
 
 import logging
-import logging.handlers
 import sys
-from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.table import Table
 
-from dnlab_multinode.services.paths import PATHS
+from dnlab_multinode.services.logging_config import setup_service_logging
 
 console = Console()
 
 
 def _setup_logging(debug: bool = False) -> None:
-    root = logging.getLogger("dnlab_multinode")
-    root.setLevel(logging.DEBUG)
-
-    fmt = logging.Formatter(
-        "%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    setup_service_logging(
+        service="multinode",
+        filename="dnlab-multinode.log",
+        debug=debug,
     )
-
-    # Console handler
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG if debug else logging.INFO)
-    ch.setFormatter(fmt)
-    root.addHandler(ch)
-
-    # File handler
-    log_dir = Path(PATHS.log_dir_multinode)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    fh = logging.handlers.RotatingFileHandler(
-        log_dir / "dnlab-multinode.log",
-        maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8",
-    )
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(fmt)
-    root.addHandler(fh)
 
 
 @click.group()

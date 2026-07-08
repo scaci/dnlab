@@ -31,8 +31,7 @@ _DEFAULTS: dict[str, str] = {
     "image_build_workspace": "/var/lib/dnlab-image-build",
     "ssh_key": "/root/.ssh/id_ed25519",
     "gui_ssh_key": "/root/.ssh/dnlab-gui.key",
-    "log_dir_multinode": "/var/log/dnlab-multinode",
-    "log_dir_gui": "/var/log/dnlab-gui",
+    "log_root": "/var/log/dnlab",
     "tmp_dir": "/tmp",
     "containerlab_bin": "/usr/bin/containerlab",
     "docker_socket": "unix:///var/run/docker.sock",
@@ -53,8 +52,7 @@ class Paths:
     image_build_workspace: str
     ssh_key: str
     gui_ssh_key: str
-    log_dir_multinode: str
-    log_dir_gui: str
+    log_root: str
     tmp_dir: str
     containerlab_bin: str
     docker_socket: str

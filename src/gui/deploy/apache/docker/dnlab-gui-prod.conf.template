@@ -14,8 +14,8 @@ ServerName ${DNLAB_PROXY_SERVER_NAME}
     RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
     RewriteRule ^/?(.*) https://%{HTTP_HOST}/$1 [R=301,L]
 
-    ErrorLog ${APACHE_LOG_DIR}/dnlab-gui-error.log
-    CustomLog ${APACHE_LOG_DIR}/dnlab-gui-access.log combined
+    ErrorLog /var/log/dnlab/proxy/error.log
+    CustomLog /var/log/dnlab/proxy/access.log combined
 </VirtualHost>
 
 <VirtualHost *:443>
@@ -71,7 +71,7 @@ ServerName ${DNLAB_PROXY_SERVER_NAME}
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Host "%{HTTP_HOST}e" env=HTTP_HOST
 
-    ErrorLog ${APACHE_LOG_DIR}/dnlab-gui-error.log
-    CustomLog ${APACHE_LOG_DIR}/dnlab-gui-access.log combined
+    ErrorLog /var/log/dnlab/proxy/error.log
+    CustomLog /var/log/dnlab/proxy/access.log combined
     LogLevel warn
 </VirtualHost>

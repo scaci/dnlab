@@ -6,7 +6,7 @@
 
 > Build network labs on one node or across many, orchestrated automatically and transparently.
 
-![Release](https://img.shields.io/badge/release-0.1.1-blue)
+![Release](https://img.shields.io/badge/release-0.1.2-blue)
 ![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)
 ![Images](https://img.shields.io/badge/images-GHCR-blue)
 
@@ -72,7 +72,7 @@ Public release packages are published as `ghcr.io/scaci/dnlab-*` container
 images and are linked to this public `scaci/dnlab` repository. The matching
 AGPL source archives are attached to the corresponding GitHub Release.
 
-Current release: `0.1.1`. The Compose stack requires `DNLAB_VERSION=0.1.1`
+Current release: `0.1.2`. The Compose stack requires `DNLAB_VERSION=0.1.2`
 in `.env`; this selects the published GHCR images for the release.
 
 The stack contains these Compose services:
@@ -86,8 +86,8 @@ The stack contains these Compose services:
 - `image-sync`: internal image synchronization helper.
 - `auth-db`: support Postgres service for GUI local-db auth.
 
-Images, binaries, log directories, TLS files and source artifacts keep their
-`dnlab-*` product names.
+Images, binaries, TLS files and source artifacts keep their `dnlab-*` product
+names. Runtime service logs are stored under `/var/log/dnlab`.
 
 ## Repository Layout
 

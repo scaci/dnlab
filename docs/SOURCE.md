@@ -12,8 +12,8 @@ same tag.
 
 For example:
 
-- Image: `ghcr.io/scaci/dnlab-gui:0.1.1`
-- Source: release `v0.1.1`, artifact `dnlab-gui-0.1.1-source.tar.gz`
+- Image: `ghcr.io/scaci/dnlab-gui:0.1.2`
+- Source: release `v0.1.2`, artifact `dnlab-gui-0.1.2-source.tar.gz`
 
 The corresponding source archive must include the application source,
 Dockerfiles, build scripts, release metadata and configuration needed to build,
@@ -65,7 +65,7 @@ private operational repositories to be made public.
 
 Some releases also include a ready-made Proxmox LXC template published as an
 OCI artifact on GitHub Container Registry, for example
-`ghcr.io/scaci/dnlab-lxc-proxmox:0.1.1`. The template is a distribution binary;
+`ghcr.io/scaci/dnlab-lxc-proxmox:0.1.2`. The template is a distribution binary;
 it is not committed to this repository.
 
 The LXC template build and first-boot helper code is internal release

@@ -75,7 +75,7 @@ class Settings:
     ))
 
     # GUI log directory.
-    LOG_DIR: Path = Path(os.getenv("DNLABGUI_LOG_DIR", PATHS.log_dir_gui))
+    LOG_DIR: Path = Path(os.getenv("DNLABGUI_LOG_DIR", str(Path(PATHS.log_root) / "gui")))
 
     # Ring-buffer size (events for lab) for the in-process event bus
     # that powers /ws/events/{lab}.

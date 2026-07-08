@@ -13,23 +13,23 @@ You do not need to build the template yourself for a normal installation.
 The primary distribution channel for the LXC template is GHCR:
 
 ```text
-ghcr.io/scaci/dnlab-lxc-proxmox:0.1.1
+ghcr.io/scaci/dnlab-lxc-proxmox:0.1.2
 ```
 
 Install `oras` on your workstation or Proxmox host then pull the artifact:
 
 ```bash
-mkdir -p dnlab-lxc-0.1.1
-cd dnlab-lxc-0.1.1
-oras pull ghcr.io/scaci/dnlab-lxc-proxmox:0.1.1
+mkdir -p dnlab-lxc-0.1.2
+cd dnlab-lxc-0.1.2
+oras pull ghcr.io/scaci/dnlab-lxc-proxmox:0.1.2
 sha256sum -c SHA256SUMS
 ```
 
 The artifact contains:
 
 ```text
-dnlab-lxc-proxmox-0.1.1-amd64.tar.zst
-LXC-RELEASE-NOTES-0.1.1.md
+dnlab-lxc-proxmox-0.1.2-amd64.tar.zst
+LXC-RELEASE-NOTES-0.1.2.md
 proxmox-dnlab-ct.conf
 apply-proxmox-ct-tuning.sh
 prepare-proxmox-ct.sh
@@ -78,11 +78,11 @@ dNLab needs Docker, Containerlab, nested containers and host-like networking.
 Bare metal remains the reference deployment model; Proxmox LXC is usable only
 when the CT exposes the required privileges and kernel features.
 
-Copy `dnlab-lxc-proxmox-0.1.1-amd64.tar.zst` to a Proxmox storage that accepts
+Copy `dnlab-lxc-proxmox-0.1.2-amd64.tar.zst` to a Proxmox storage that accepts
 CT templates, normally:
 
 ```bash
-cp dnlab-lxc-proxmox-0.1.1-amd64.tar.zst /var/lib/vz/template/cache/
+cp dnlab-lxc-proxmox-0.1.2-amd64.tar.zst /var/lib/vz/template/cache/
 ```
 
 Then create a CT from it.
@@ -308,11 +308,12 @@ hostnames, use a certificate that covers both the GUI hostname and
 `*.${DNLAB_PROXY_SERVER_NAME}`.
 
 The generated `/etc/dnlab/paths.yml` should match the bare metal shape and
-include both SSH keys:
+include both SSH keys plus the shared log root:
 
 ```yaml
 ssh_key: /root/.ssh/id_ed25519_github_dnlab
 ssh_gui_key: /root/.ssh/dnlab-gui.key
+log_root: /var/log/dnlab
 ```
 
 The corresponding public keys are:

@@ -3,8 +3,6 @@
 import asyncio
 import logging
 import logging.handlers
-from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -35,7 +33,7 @@ def _setup_logging() -> None:
 
     Logs go to:
       - Console (stderr): INFO and above
-      - File (<settings.LOG_DIR>/dnlab-gui.log): DEBUG and above, rotating 5x10MB
+      - File (<log_root>/gui/dnlab-gui.log): DEBUG and above, rotating 5x10MB
     """
     log_dir = settings.LOG_DIR
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -44,6 +42,8 @@ def _setup_logging() -> None:
     # Root logger for the app package
     root = logging.getLogger("app")
     root.setLevel(logging.DEBUG)
+    if root.handlers:
+        return
 
     fmt = logging.Formatter(
         "%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",

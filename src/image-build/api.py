@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import logging.handlers
 import os
 import re
 import secrets
@@ -30,6 +32,7 @@ SCRIPT = ROOT / "build_image.py"
 PATCHES = ROOT / "patches"
 LOG_LIMIT = 1200
 WORKSPACE = Path(os.getenv("DNLAB_IMAGE_BUILD_WORKSPACE", "/var/lib/dnlab-image-build"))
+LOG_ROOT = Path(os.getenv("DNLAB_LOG_ROOT", "/var/log/dnlab"))
 VRNETLAB_ROOT = Path(os.getenv("DNLAB_VRNETLAB_DIR", "/opt/vrnetlab"))
 JOBS_DIR = WORKSPACE / "jobs"
 LOGS_DIR = WORKSPACE / "logs"
@@ -63,10 +66,12 @@ class Job:
 
 app = FastAPI(title="dNLab Image Build API", version="0.1.0")
 _jobs: dict[str, Job] = {}
+log = logging.getLogger("dnlab_image_build")
 
 
 @app.on_event("startup")
 async def startup() -> None:
+    _setup_logging()
     await asyncio.to_thread(_load_jobs)
 
 
@@ -499,6 +504,35 @@ def _parse_dt(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def _setup_logging() -> None:
+    log.setLevel(logging.DEBUG)
+    if log.handlers:
+        return
+    fmt = logging.Formatter(
+        "%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(fmt)
+    log.addHandler(ch)
+
+    log_dir = LOG_ROOT / "image-build"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    fh = logging.handlers.RotatingFileHandler(
+        log_dir / "dnlab-image-build.log",
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(fmt)
+    log.addHandler(fh)
+    for uv_name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        logging.getLogger(uv_name).addHandler(fh)
+    log.info("Logging initialized -> %s", log_dir / "dnlab-image-build.log")
 
 
 def main() -> None:

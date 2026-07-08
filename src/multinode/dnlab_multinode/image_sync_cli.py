@@ -20,16 +20,17 @@ from dnlab_multinode.services.image_sync import (
     DEFAULT_STATE_FILE, ImageSyncDaemon,
     list_master_images, filter_images, reconcile_once, read_state_file,
 )
+from dnlab_multinode.services.logging_config import setup_service_logging
 
 console = Console()
 log = logging.getLogger(__name__)
 
 
 def _setup_logging(debug: bool) -> None:
-    logging.basicConfig(
-        level=logging.DEBUG if debug else logging.INFO,
-        format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    setup_service_logging(
+        service="image-sync",
+        filename="dnlab-image-sync.log",
+        debug=debug,
     )
 
 

@@ -136,6 +136,15 @@ assert isinstance(kinds.get("patchable"), list), kinds
 print({"health": health, "patchable": len(kinds["patchable"])})
 PY
 
+echo "== infrastructure logs =="
+compose exec -T proxy sh -lc 'test -s /var/log/dnlab/proxy/access.log && test -e /var/log/dnlab/proxy/error.log'
+compose exec -T gui sh -lc 'test -s /var/log/dnlab/gui/dnlab-gui.log'
+compose exec -T auth-db sh -lc 'test -s /var/log/dnlab/auth-db/postgresql.log'
+compose exec -T multinode sh -lc 'test -s /var/log/dnlab/multinode/dnlab-multinode.log'
+compose exec -T image-sync sh -lc 'test -s /var/log/dnlab/image-sync/dnlab-image-sync.log'
+compose exec -T lab-cleanup sh -lc 'test -s /var/log/dnlab/lab-cleanup/dnlab-lab-cleanup.log'
+compose exec -T image-build sh -lc 'test -s /var/log/dnlab/image-build/dnlab-image-build.log'
+
 echo "== syslog guardrail =="
 if rg -n "syslog|log-shipper|syslog_mount" "${COMPOSE_FILE_LIST[@]}"; then
   echo "runtime syslog/log-shipper reference found in docker compose files" >&2

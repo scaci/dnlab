@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import logging.handlers
 import signal
 from pathlib import Path
 
@@ -18,36 +17,18 @@ from dnlab_multinode.services.lab_cleanup import (
     read_state_file,
     reconcile_once,
 )
-from dnlab_multinode.services.paths import PATHS
+from dnlab_multinode.services.logging_config import setup_service_logging
 
 console = Console()
 log = logging.getLogger("dnlab_multinode.lab_cleanup")
 
 
 def _setup_logging(debug: bool = False) -> None:
-    root = logging.getLogger("dnlab_multinode")
-    root.setLevel(logging.DEBUG)
-    if root.handlers:
-        return
-    fmt = logging.Formatter(
-        "%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    setup_service_logging(
+        service="lab-cleanup",
+        filename="dnlab-lab-cleanup.log",
+        debug=debug,
     )
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG if debug else logging.INFO)
-    ch.setFormatter(fmt)
-    root.addHandler(ch)
-    log_dir = Path(PATHS.log_dir_multinode)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    fh = logging.handlers.RotatingFileHandler(
-        log_dir / "dnlab-lab-cleanup.log",
-        maxBytes=10 * 1024 * 1024,
-        backupCount=5,
-        encoding="utf-8",
-    )
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(fmt)
-    root.addHandler(fh)
 
 
 @click.group()
