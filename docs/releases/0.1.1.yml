@@ -1,0 +1,46 @@
+version: 0.1.1
+date: 2026-07-07
+tag: v0.1.1
+summary: >-
+  Bugfix release for stale per-lab service cleanup and Docker Compose naming,
+  plus runtime helper image prefix consistency.
+entries:
+  - category: Fixed
+    title: Orphan per-lab service containers were not always cleaned up
+    body: >-
+      The cleanup reconciler now protects a lab only when actual VD runtime
+      containers are running. Per-lab service containers such as runtime relay,
+      DNS, jumphost, legacy logging services, and mgmt-anchor no longer keep an
+      inactive lab from being cleaned up by themselves.
+  - category: Fixed
+    title: Duplicated Docker Compose service prefixes
+    body: >-
+      Compose service keys were normalized so the Compose project name no
+      longer produces duplicated dnlab-dnlab-* container names. Documentation
+      now uses the clean service names such as proxy, gui, multinode,
+      image-sync, lab-cleanup, image-build, and auth-db.
+  - category: Fixed
+    title: Runtime helper image prefix mismatch
+    body: >-
+      Runtime helper image naming is now driven by configuration instead of
+      duplicated Compose defaults, keeping local flat image names and GHCR
+      release image names consistent across multinode services and release
+      image preload placeholders.
+breaking_changes: []
+upgrade_notes: []
+artifacts:
+  - name: Source archives
+    type: github-release
+    path: "*-0.1.1-source.tar.gz"
+    channel: GitHub Release
+    notes: Corresponding source archives for the published GHCR images.
+  - name: Source checksums
+    type: github-release
+    path: SHA256SUMS
+    channel: GitHub Release
+    notes: Checksums for downloadable release assets.
+source_notes:
+  - CHANGELOG.md
+internal_refs:
+  - bugfix/version_0.1.1.md
+  - plans/achieved-2026-06-18-multinode-remove-container-builds.md

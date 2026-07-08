@@ -1,0 +1,51 @@
+version: 0.1.0
+date: 2026-06-18
+tag: v0.1.0
+summary: >-
+  Initial public dNLab release with the Docker Compose distribution, GHCR image
+  publication, corresponding source archives, and the first Proxmox LXC
+  template artifact.
+entries:
+  - category: Added
+    title: Public Compose distribution
+    body: >-
+      Added the public dNLab distribution repository with Compose files,
+      install documentation, source availability policy, and administrator
+      guides for the first published release.
+  - category: Added
+    title: GHCR release images
+    body: >-
+      Published the dNLab service image family under ghcr.io/scaci/dnlab-* for
+      versioned installations.
+  - category: Added
+    title: Proxmox LXC template
+    artifact: lxc-proxmox
+    body: >-
+      Published the first ready-made Proxmox LXC template for dNLab with the
+      required Proxmox helper assets and first-boot setup flow.
+breaking_changes: []
+upgrade_notes: []
+artifacts:
+  - name: Source archives
+    type: github-release
+    path: "*-0.1.0-source.tar.gz"
+    channel: GitHub Release
+    notes: Corresponding source archives for the published GHCR images.
+  - name: Source checksums
+    type: github-release
+    path: SHA256SUMS
+    channel: GitHub Release
+    notes: Checksums for downloadable release assets.
+  - name: Proxmox LXC template
+    type: lxc-proxmox
+    path: dnlab-lxc-proxmox-0.1.0-amd64.tar.zst
+    channel: GHCR and GitHub Release mirror
+    notes: Canonical OCI artifact ghcr.io/scaci/dnlab-lxc-proxmox:0.1.0.
+  - name: Proxmox LXC release notes
+    type: lxc-proxmox
+    path: LXC-RELEASE-NOTES-0.1.0.md
+    channel: GHCR and GitHub Release mirror
+    notes: Browser-friendly release note mirror for the LXC artifact.
+source_notes:
+  - CHANGELOG.md
+internal_refs: []

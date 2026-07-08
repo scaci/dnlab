@@ -733,7 +733,7 @@ docker compose -f compose.yml up -d --force-recreate multinode image-sync lab-cl
 For the `0.1.2` logging migration, replace any old per-service logging entries
 with `log_root: /var/log/dnlab`. Use `DNLAB_LOG_ROOT` only if the host-side log
 root must differ from `/var/log/dnlab`. See
-`docs/RELEASE_NOTES_0.1.2.md` for the legacy key names and one-time migration
+`CHANGELOG.md` for the legacy key names and one-time migration
 checklist.
 
 Run guardrails:

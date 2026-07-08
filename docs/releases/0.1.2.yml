@@ -1,0 +1,67 @@
+version: 0.1.2
+date: 2026-07-08
+tag: v0.1.2
+summary: >-
+  Logging release that standardizes runtime infrastructure logs under a single
+  /var/log/dnlab root across the Docker stack.
+entries:
+  - category: Breaking
+    title: Unified runtime log root
+    body: >-
+      /etc/dnlab/paths.yml now uses log_root: /var/log/dnlab. The previous
+      public keys log_dir_gui and log_dir_multinode are removed, and the
+      Compose environment variables DNLAB_LOG_DIR_GUI and
+      DNLAB_LOG_DIR_MULTINODE are replaced by DNLAB_LOG_ROOT.
+  - category: Changed
+    title: Runtime log layout
+    body: >-
+      Persistent service logs now live under /var/log/dnlab with dedicated
+      subdirectories for proxy, gui, auth-db, multinode, image-sync,
+      lab-cleanup, and image-build.
+  - category: Changed
+    title: Image-build job logs remain application data
+    body: >-
+      Image-build job logs stay under /var/lib/dnlab-image-build/logs because
+      they are job history data used by the GUI, not service infrastructure
+      logs.
+breaking_changes:
+  - title: paths.yml logging keys changed
+    body: >-
+      Replace log_dir_gui and log_dir_multinode with log_root in
+      /etc/dnlab/paths.yml.
+  - title: Compose logging environment changed
+    body: >-
+      Replace DNLAB_LOG_DIR_GUI and DNLAB_LOG_DIR_MULTINODE with
+      DNLAB_LOG_ROOT when customizing the host-side log directory.
+upgrade_notes:
+  - "Create the log root before recreating services: sudo mkdir -p /var/log/dnlab"
+  - "Replace old logging keys in /etc/dnlab/paths.yml with log_root: /var/log/dnlab"
+  - Replace DNLAB_LOG_DIR_GUI and DNLAB_LOG_DIR_MULTINODE with DNLAB_LOG_ROOT in .env customizations.
+  - Recreate runtime services with docker compose -f compose.yml up -d --force-recreate proxy gui auth-db multinode image-sync lab-cleanup image-build.
+  - Run ./smoke.sh after the upgrade to verify service health and log files.
+artifacts:
+  - name: Source archives
+    type: github-release
+    path: "*-0.1.2-source.tar.gz"
+    channel: GitHub Release
+    notes: Corresponding source archives for the published GHCR images.
+  - name: Source checksums
+    type: github-release
+    path: SHA256SUMS
+    channel: GitHub Release
+    notes: Checksums for downloadable release assets.
+  - name: Proxmox LXC template
+    type: lxc-proxmox
+    path: dnlab-lxc-proxmox-0.1.2-amd64.tar.zst
+    channel: GHCR and GitHub Release mirror
+    notes: Canonical OCI artifact ghcr.io/scaci/dnlab-lxc-proxmox:0.1.2.
+  - name: Proxmox LXC release notes
+    type: lxc-proxmox
+    path: LXC-RELEASE-NOTES-0.1.2.md
+    channel: GHCR and GitHub Release mirror
+    notes: Browser-friendly release note mirror for the LXC artifact.
+source_notes:
+  - CHANGELOG.md
+  - docs/PROXMOX_LXC_TEMPLATE.md
+internal_refs:
+  - plans/achieved-2026-07-08-unified-stack-logging-v0-1-2.md

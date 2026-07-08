@@ -37,11 +37,19 @@ For a release `vX.Y.Z`, the expected source asset names are:
 - `dnlab-realnet-rr-X.Y.Z-source.tar.gz`
 - `dnlab-mgmt-anchor-X.Y.Z-source.tar.gz`
 - `dnlab-image-build-X.Y.Z-source.tar.gz`
+- `CHANGELOG-X.Y.Z.md`
+- `RELEASE_NOTES-X.Y.Z.md`
+- `RELEASE-MANIFEST-X.Y.Z.json`
 - `SHA256SUMS`
 
 Each source archive includes a `SOURCE-MANIFEST.json` file that identifies the
 image, version, source repository, release tag, commit SHA, Dockerfile and build
 context used for the corresponding image.
+
+The changelog, release notes and release manifest assets are generated from the
+structured release source in `docs/releases/X.Y.Z.yml`. `CHANGELOG.md` remains
+the version-controlled aggregate changelog, while the generated assets are the
+immutable release snapshot attached to the GitHub Release.
 
 Each public image should also carry a generated third-party notice bundle inside
 the image at `/usr/share/doc/dnlab/third-party/`. The bundle records the image
