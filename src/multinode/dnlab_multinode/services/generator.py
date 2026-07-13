@@ -31,14 +31,20 @@ MGMT_ANCHOR_NODE = "mgmt-anchor"
 
 
 def _needs_persist_bind(image: str) -> bool:
-    """Return True for images explicitly patched by dnlab.
+    """Return True for images explicitly patched by dNLab.
 
-    The ``-dnlab`` suffix is the contract that the image knows how to use a
-    host-side bind mounted at ``/persist``. This works for both vrnetlab and
-    container-native images, regardless of registry prefix.
+    The primary contract is the ``-dnlab`` tag suffix. Older/local custom
+    dNLab images can also use a ``dnlab_*`` repository name while already
+    containing the persistence support in their launcher.
     """
-    tag = (image or "").rsplit(":", 1)[-1]
-    return tag.endswith("-dnlab")
+    image = str(image or "").strip()
+    if not image:
+        return False
+    tag = image.rsplit(":", 1)[-1]
+    if tag.endswith("-dnlab"):
+        return True
+    repo = image.rsplit(":", 1)[0] if ":" in image else image
+    return repo.rsplit("/", 1)[-1].startswith("dnlab_")
 
 
 def node_asset_path(topo_name: str, node_name: str, filename: str) -> str:

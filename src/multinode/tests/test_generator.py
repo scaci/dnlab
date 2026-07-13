@@ -162,6 +162,8 @@ def test_persist_bind_uses_stable_persist_id(topo_factory):
 def test_needs_persist_bind_uses_image_tag_suffix():
     assert _needs_persist_bind("vrnetlab/cisco_n9kv_v2:10.5-dnlab")
     assert _needs_persist_bind("quay.io/frrouting/frr:10.2.6-dnlab")
+    assert _needs_persist_bind("vrnetlab/dnlab_frr:10.6.1")
+    assert _needs_persist_bind("registry.example/dnlab_custom:latest")
     assert not _needs_persist_bind("vrnetlab/cisco_n9kv_v2:10.5")
     assert not _needs_persist_bind("quay.io/frrouting/frr:10.2.6")
 
