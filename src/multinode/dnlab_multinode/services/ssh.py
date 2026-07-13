@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 from pathlib import Path
 
 import paramiko
@@ -102,7 +103,7 @@ class SSHClient:
 
     def deploy_clab(self, topology_file: str, *, reconfigure: bool = False) -> str:
         """Run containerlab deploy and return output."""
-        cmd = f"containerlab deploy -t {topology_file}"
+        cmd = f"containerlab deploy -t {shlex.quote(topology_file)}"
         if reconfigure:
             cmd += " --reconfigure"
         return self.run(
@@ -113,7 +114,7 @@ class SSHClient:
     def destroy_clab(self, topology_file: str) -> str:
         """Run containerlab destroy and return output."""
         return self.run(
-            f"containerlab destroy -t {topology_file} --cleanup",
+            f"containerlab destroy -t {shlex.quote(topology_file)} --cleanup",
             timeout=_DEPLOY_TIMEOUT,
             check=False,
         )
