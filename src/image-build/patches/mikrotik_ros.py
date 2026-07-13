@@ -15,17 +15,20 @@ FILES = [
     "/launch.py",
 ]
 
-_MARKER = "# dnlab-patched: mikrotik-persist-overlay-v1"
+_MARKER_V1 = "# dnlab-patched: mikrotik-persist-overlay-v1"
+_MARKER = "# dnlab-patched: mikrotik-persist-overlay-v2"
 _CONFIG_ANCHOR = 'CONFIG_FILE = "/ftpboot/config.auto.rsc"\n'
 _CONFIG_REPLACEMENT = f'{_CONFIG_ANCHOR}PERSIST_DIR = "/persist"\n'
 
 _TRACE_ANCHOR = '''logging.Logger.trace = trace
 '''
+_LEGACY_HELPER_ANCHOR = '''def overlay_image_for(disk_image):
+'''
 
 _HELPERS = '''logging.Logger.trace = trace
 
 
-# dnlab-patched: mikrotik-persist-overlay-v1
+# dnlab-patched: mikrotik-persist-overlay-v2
 def overlay_image_for(disk_image):
     return re.sub(r"(\\.[^.]+$)", r"-overlay\\1", disk_image)
 
@@ -40,6 +43,9 @@ def prepare_persistent_overlay(vm, disk_image):
     overlay_img = overlay_image_for(disk_image)
     persistent_overlay = os.path.join(PERSIST_DIR, os.path.basename(overlay_img))
 
+    initialized_marker = persistent_overlay + ".dnlab-initialized"
+    vm._dnlab_persistent_overlay_marker = initialized_marker
+    vm._dnlab_persistent_overlay_reused = os.path.exists(initialized_marker)
     if not os.path.exists(persistent_overlay):
         if os.path.exists(overlay_img):
             vrnetlab.run_command(["mv", overlay_img, persistent_overlay])
@@ -81,6 +87,79 @@ _SUPER_REPLACEMENT = '''        super(ROS_vm, self).__init__(username, password,
         prepare_persistent_overlay(self, disk_image)
 '''
 
+_LOGIN_EXPECT_ANCHOR = '''        (ridx, match, res) = self.tn.expect([b"MikroTik Login", b"RouterOS Login"], 1)
+'''
+_LOGIN_EXPECT_REPLACEMENT = '''        (ridx, match, res) = self.tn.expect(
+            [b"MikroTik Login", b"RouterOS Login", rb"[^\\r\\n]+ Login"], 1
+        )
+'''
+_LOGIN_MATCH_ANCHOR = '''            if ridx in (0, 1):  # login
+'''
+_LOGIN_MATCH_REPLACEMENT = '''            if ridx in (0, 1, 2):  # login
+'''
+_LOGIN_WRITE_ANCHOR = '''                elif ridx == 1:
+                    self.wait_write("admin+ct", wait="RouterOS Login: ")
+                self.wait_write("", wait="Password: ")
+'''
+_LOGIN_WRITE_REPLACEMENT = '''                elif ridx == 1:
+                    self.wait_write("admin+ct", wait="RouterOS Login: ")
+                else:
+                    # A reused persistent overlay displays the configured
+                    # system identity instead of the vendor login prompt.
+                    self.wait_write("admin+ct", wait=" Login: ")
+                self.wait_write(
+                    self.password
+                    if getattr(self, "_dnlab_persistent_overlay_reused", False)
+                    else "",
+                    wait="Password: ",
+                )
+'''
+_LICENSE_ANCHOR = '''                if self.arch != "aarch64":
+'''
+_LICENSE_REPLACEMENT = '''                if self.arch != "aarch64" and not getattr(
+                    self, "_dnlab_persistent_overlay_reused", False
+                ):
+'''
+_BOOTSTRAP_DONE_ANCHOR = '''        self.logger.info("completed bootstrap configuration")
+'''
+_BOOTSTRAP_DONE_REPLACEMENT = '''        self.logger.info("completed bootstrap configuration")
+        persistent_marker = getattr(self, "_dnlab_persistent_overlay_marker", None)
+        if persistent_marker:
+            with open(persistent_marker, "a", encoding="utf-8"):
+                pass
+'''
+_BOOTSTRAP_CALL_ANCHOR = '''                # run main config!
+                self.bootstrap_config()
+'''
+_BOOTSTRAP_CALL_REPLACEMENT = '''                # A persistent RouterOS disk already contains identity,
+                # credentials and management configuration. Reapplying the
+                # first-boot commands can hang on duplicate resources.
+                if getattr(self, "_dnlab_persistent_overlay_reused", False):
+                    self.logger.info(
+                        "persistent RouterOS overlay reused; skipping bootstrap configuration"
+                    )
+                else:
+                    self.bootstrap_config()
+'''
+
+
+def _patch_bootstrap(text: str) -> tuple[str, bool]:
+    replacements = (
+        (_LOGIN_EXPECT_ANCHOR, _LOGIN_EXPECT_REPLACEMENT),
+        (_LOGIN_MATCH_ANCHOR, _LOGIN_MATCH_REPLACEMENT),
+        (_LOGIN_WRITE_ANCHOR, _LOGIN_WRITE_REPLACEMENT),
+        (_LICENSE_ANCHOR, _LICENSE_REPLACEMENT),
+        (_BOOTSTRAP_DONE_ANCHOR, _BOOTSTRAP_DONE_REPLACEMENT),
+        (_BOOTSTRAP_CALL_ANCHOR, _BOOTSTRAP_CALL_REPLACEMENT),
+    )
+    for old, new in replacements:
+        if new in text:
+            continue
+        text, ok = _patch_once(text, old, new)
+        if not ok:
+            return text, False
+    return text, True
+
 
 def _patch_once(text: str, old: str, new: str) -> tuple[str, bool]:
     if old not in text:
@@ -91,6 +170,36 @@ def _patch_once(text: str, old: str, new: str) -> tuple[str, bool]:
 def _patch_routeros_launch(text: str) -> tuple[str, bool]:
     if _MARKER in text:
         return text, True
+
+    legacy_patched = (
+        _MARKER_V1 in text
+        or (
+            "PERSIST_DIR = \"/persist\"" in text
+            and "def prepare_persistent_overlay(vm, disk_image):" in text
+            and "prepare_persistent_overlay(self, disk_image)" in text
+        )
+    )
+    if legacy_patched:
+        if _MARKER_V1 in text:
+            new_text = text.replace(_MARKER_V1, _MARKER, 1)
+        else:
+            new_text, ok = _patch_once(
+                text, _LEGACY_HELPER_ANCHOR, f"{_MARKER}\n{_LEGACY_HELPER_ANCHOR}"
+            )
+            if not ok:
+                return text, False
+        old = "    if not os.path.exists(persistent_overlay):\n"
+        new = (
+            '    initialized_marker = persistent_overlay + ".dnlab-initialized"\n'
+            "    vm._dnlab_persistent_overlay_marker = initialized_marker\n"
+            "    vm._dnlab_persistent_overlay_reused = "
+            "os.path.exists(initialized_marker)\n"
+            "    if not os.path.exists(persistent_overlay):\n"
+        )
+        new_text, ok = _patch_once(new_text, old, new)
+        if not ok:
+            return text, False
+        return _patch_bootstrap(new_text)
 
     new_text, ok = _patch_once(text, _CONFIG_ANCHOR, _CONFIG_REPLACEMENT)
     if not ok:
@@ -104,7 +213,7 @@ def _patch_routeros_launch(text: str) -> tuple[str, bool]:
     if not ok:
         return text, False
 
-    return new_text, True
+    return _patch_bootstrap(new_text)
 
 
 def apply(path: str, text: str) -> tuple[str, list[str]]:
@@ -115,5 +224,5 @@ def apply(path: str, text: str) -> tuple[str, list[str]]:
             "likely changed; update patches/mikrotik_ros.py anchors."
         )
     if new_text != text:
-        return new_text, [f"{path}: mikrotik persist-overlay applied"]
+        return new_text, [f"{path}: mikrotik persist-overlay v2 applied"]
     return new_text, [f"{path}: already patched"]

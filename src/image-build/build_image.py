@@ -304,6 +304,19 @@ def _docker_tag_for(dir_: Path, qcow2_name: str) -> str | None:
     return f"{repo}:{version}"
 
 
+def _same_platform_default_tag(image: str) -> str | None:
+    if ":" not in image:
+        return None
+    repo, tag = image.rsplit(":", 1)
+    if "/" in tag:
+        return None
+    for arch in ("amd64", "arm64"):
+        suffix = f"-{arch}{PERSIST_SUFFIX}"
+        if tag.endswith(suffix):
+            return f"{repo}:{tag[:-len(suffix)]}{PERSIST_SUFFIX}"
+    return None
+
+
 # ── Subcommands ──────────────────────────────────────────────────────
 
 def cmd_list_patchable(_args: argparse.Namespace) -> int:
@@ -354,8 +367,8 @@ def cmd_build(args: argparse.Namespace) -> int:
         _run(cmd, dry=args.dry_run)
         patched_tag = f"{image}{tag_suffix}"
         if args.keep_upstream or not tag_suffix:
-            reason = "--keep-upstream" if args.keep_upstream else "patch in-place"
-            print(f"[{kind}] keeping upstream {image} ({reason})",
+            reason = "--keep-upstream" if args.keep_upstream else "same-tag rebuild"
+            print(f"[{kind}] keeping source tag {image} ({reason})",
                   file=sys.stderr)
         else:
             _run(["docker", "rmi", image], check=False, dry=args.dry_run)
@@ -436,18 +449,25 @@ def cmd_build(args: argparse.Namespace) -> int:
                 "cannot continue with --with-persistence. "
                 "Recheck the kind Makefile."
             )
-        # 4. Apply. Some local Makefiles already produce a -dnlab tag;
-        # in that case patch in-place instead of creating -dnlab-dnlab.
+        # 4. Apply. Some vrnetlab recipes already produce a -dnlab tag; in
+        # that case apply.py rebuilds the same tag from the freshly built raw
+        # image and the kind-specific patch module still owns all mutations.
         tag_suffix = "" if upstream_tag.endswith(PERSIST_SUFFIX) else PERSIST_SUFFIX
         cmd = [sys.executable, str(APPLY_SCRIPT), kind, upstream_tag]
         if tag_suffix != PERSIST_SUFFIX:
             cmd.append(f"--tag-suffix={tag_suffix}")
         _run(cmd, dry=args.dry_run)
         patched_tag = f"{upstream_tag}{tag_suffix}"
+        same_platform_default = (
+            _same_platform_default_tag(patched_tag) if not tag_suffix else None
+        )
+        if same_platform_default:
+            _run(["docker", "tag", patched_tag, same_platform_default],
+                 dry=args.dry_run)
         # 5. Remove the upstream tag (B3), skipped with --keep-upstream.
         if args.keep_upstream or not tag_suffix:
-            reason = "--keep-upstream" if args.keep_upstream else "patch in-place"
-            print(f"[{kind}] keeping upstream {upstream_tag} ({reason})",
+            reason = "--keep-upstream" if args.keep_upstream else "same-tag rebuild"
+            print(f"[{kind}] keeping source tag {upstream_tag} ({reason})",
                   file=sys.stderr)
         else:
             _run(["docker", "rmi", upstream_tag],
