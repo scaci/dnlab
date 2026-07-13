@@ -42,7 +42,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dnlab_multinode.services.hosts_config import HostsConfig, ImageSyncConfig
+from dnlab_multinode.services.hosts_config import (
+    HostsConfig, ImageSyncConfig, load_hosts_config,
+)
 from dnlab_multinode.services.paths import PATHS
 from dnlab_multinode.services.resources import sync_image_to_host
 from dnlab_multinode.services.ssh import SSHClient, create_clients
@@ -145,13 +147,17 @@ def filter_images(
     """
     def _matches(name: str, patterns: list[str]) -> bool:
         # A pattern without ``:`` or a glob wildcard is treated as matching
-        # any tag — e.g. ``dnlab-runtime-relay`` matches
-        # ``dnlab-runtime-relay:latest``.
+        # any tag, with or without a registry/path prefix. For example,
+        # ``dnlab-runtime-relay`` matches both ``dnlab-runtime-relay:latest``
+        # and ``ghcr.io/scaci/dnlab-runtime-relay:latest``.
         for p in patterns:
             if fnmatch.fnmatchcase(name, p):
                 return True
             if ":" not in p and "*" not in p and "?" not in p:
-                if fnmatch.fnmatchcase(name, f"{p}:*"):
+                if (
+                    fnmatch.fnmatchcase(name, f"{p}:*")
+                    or fnmatch.fnmatchcase(name, f"*/{p}:*")
+                ):
                     return True
         return False
 
@@ -384,9 +390,11 @@ class ImageSyncDaemon:
         hosts: HostsConfig,
         state_file: Path = DEFAULT_STATE_FILE,
         *,
+        hosts_file: str | None = None,
         remove_extra: bool = True,
     ):
         self.hosts = hosts
+        self.hosts_file = hosts_file
         self.state_file = Path(state_file)
         self.remove_extra = remove_extra
         self._stop = threading.Event()
@@ -455,6 +463,8 @@ class ImageSyncDaemon:
 
     def _do_reconcile(self) -> None:
         try:
+            if self.hosts_file:
+                self.hosts = load_hosts_config(self.hosts_file)
             state = reconcile_once(
                 self.hosts, self.state_file,
                 remove_extra=self.remove_extra,
