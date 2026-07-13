@@ -98,6 +98,11 @@ class NodeLifecycleController:
             for client in clients.values():
                 client.close()
 
+    def restart(self, node: str) -> DeploymentState:
+        """Restart one VD using the established per-VD stop/start paths."""
+        self.stop(node)
+        return self.start(node)
+
     def reconcile(self, node: str | None = None) -> DeploymentState:
         self._ensure_deployed()
         clients = create_clients(self.topo.all_hosts)

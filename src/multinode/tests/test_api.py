@@ -92,6 +92,9 @@ class _FakeNodeLifecycleController:
     def start(self, node):
         return _FakeState()
 
+    def restart(self, node):
+        return _FakeState()
+
     def reconcile(self, node):
         return _FakeState()
 
@@ -138,6 +141,17 @@ def test_node_list_endpoint_serializes_runtime(monkeypatch):
     res = asyncio.run(api.lab_nodes(api.LabRequest(topology_file="/tmp/demo.yml")))
 
     assert res["nodes"]["r1"] == {"node": "r1", "state": "running"}
+
+
+def test_node_restart_endpoint_uses_per_vd_controller(monkeypatch):
+    monkeypatch.setattr(api, "NodeLifecycleController", _FakeNodeLifecycleController)
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+
+    res = asyncio.run(
+        api.lab_node_restart(api.NodeRequest(topology_file="/tmp/demo.yml", node="r1"))
+    )
+
+    assert res == {"lab_name": "demo", "dnlab_deployed": True}
 
 
 def test_runtime_relay_endpoint_reads_state(monkeypatch):

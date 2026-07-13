@@ -147,6 +147,18 @@ class LabController:
             log.exception("Node stop crashed")
             return {"success": False, "output": f"{type(exc).__name__}: {exc}"}
 
+    async def node_restart(self, lab: ResolvedLab, node_name: str) -> dict:
+        log.info("API node_restart: %s/%s (%s)", lab.display_name, node_name, lab.netname)
+        try:
+            state = await multinode.node_restart(lab, node_name)
+            return {"success": True, "output": "", "state": state}
+        except MultinodeServiceError as exc:
+            log.error("Node restart failed: %s", exc)
+            return {"success": False, "output": str(exc)}
+        except Exception as exc:
+            log.exception("Node restart crashed")
+            return {"success": False, "output": f"{type(exc).__name__}: {exc}"}
+
     async def node_reconcile(self, lab: ResolvedLab, node_name: str) -> dict:
         log.info("API node_reconcile: %s/%s (%s)", lab.display_name, node_name, lab.netname)
         try:

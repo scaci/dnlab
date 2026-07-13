@@ -364,6 +364,11 @@ async def lab_node_stop(req: NodeRequest) -> dict[str, Any]:
     return await _node_mutation(req, "stop")
 
 
+@app.post("/labs/nodes/restart")
+async def lab_node_restart(req: NodeRequest) -> dict[str, Any]:
+    return await _node_mutation(req, "restart")
+
+
 @app.post("/labs/nodes/reconcile")
 async def lab_node_reconcile(req: NodeRequest) -> dict[str, Any]:
     return await _node_mutation(req, "reconcile")
@@ -485,6 +490,8 @@ async def _node_mutation(req: NodeRequest, action: str) -> dict[str, Any]:
                     return ctrl.start(req.node)
                 if action == "stop":
                     return ctrl.stop(req.node)
+                if action == "restart":
+                    return ctrl.restart(req.node)
                 return ctrl.reconcile(req.node)
 
             state = await asyncio.to_thread(_run)

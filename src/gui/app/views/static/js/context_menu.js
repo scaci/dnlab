@@ -11,6 +11,7 @@
  *   ContextMenu.on('properties', cb)
  *   ContextMenu.on('start-vd',   cb)
  *   ContextMenu.on('stop-vd',    cb)
+ *   ContextMenu.on('restart-vd', cb)
  *   ContextMenu.on('wipe-disk',  cb)
  *   ContextMenu.on('remove',     cb)
  *   ContextMenu.on('capture-mgmt', cb)
@@ -45,15 +46,18 @@ const ContextMenu = (() => {
     const runCls = isNodeRunning ? '' : 'cm-disabled';
     const runtimeState = nodeData.runtime_state || (isNodeRunning ? 'running' : '');
     const isPerVdRuntime = _isPerVdRuntime(nodeData);
-    const isBusy = runtimeState === 'starting' || runtimeState === 'stopping';
+    const isBusy = runtimeState === 'starting' || runtimeState === 'stopping' || runtimeState === 'restarting';
     const canStop = isLabRunning && isPerVdRuntime && runtimeState === 'running' && !isBusy;
     const canStart = isLabRunning && isPerVdRuntime && (runtimeState === 'stopped' || runtimeState === 'error') && !isBusy;
+    const canRestart = isLabRunning && isPerVdRuntime && runtimeState === 'running' && !isBusy;
     const stopCls = canStop ? '' : 'cm-disabled';
     const startCls = canStart ? '' : 'cm-disabled';
+    const restartCls = canRestart ? '' : 'cm-disabled';
     const labTitle = isLabRunning ? '' : 'Lab not deployed';
     const runtimeTitle = isPerVdRuntime ? '' : 'Available only on per-VD runtime deployments';
     const stopTitle = canStop ? '' : (labTitle || runtimeTitle || 'VD is not running');
     const startTitle = canStart ? '' : (labTitle || runtimeTitle || 'VD is not stopped');
+    const restartTitle = canRestart ? '' : (labTitle || runtimeTitle || 'VD is not running');
 
     const webuiItems = _webuiItems(nodeData, isNodeRunning);
     const mgmtCapture = _mgmtCaptureItem(nodeData, isNodeRunning);
@@ -81,6 +85,9 @@ const ContextMenu = (() => {
       </div>
       <div class="cm-item ${startCls}" data-action="start-vd" title="${startTitle}">
         ▶️ Start VD
+      </div>
+      <div class="cm-item ${restartCls}" data-action="restart-vd" title="${restartTitle}">
+        🔁 Restart VD
       </div>
       <div class="cm-sep"></div>
       <div class="cm-item" data-action="rename">

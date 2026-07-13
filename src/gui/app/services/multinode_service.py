@@ -676,6 +676,23 @@ class MultinodeService:
                 return state.to_dict() if hasattr(state, "to_dict") else {}
             return await asyncio.to_thread(_stop)
 
+    async def node_restart(self, lab: ResolvedLab, node_name: str) -> dict:
+        topo_path = _require_file(lab)
+        if self._use_api:
+            return await self._api_post(
+                "/labs/nodes/restart",
+                self._lab_payload(lab, topology_file=topo_path, node=node_name),
+            )
+        async with _deploy_lock:
+            def _restart() -> dict:
+                from dnlab_multinode import NodeLifecycleController
+
+                state = NodeLifecycleController(
+                    str(topo_path), hosts_file=self._hosts_file,
+                ).restart(node_name)
+                return state.to_dict() if hasattr(state, "to_dict") else {}
+            return await asyncio.to_thread(_restart)
+
     async def node_reconcile(self, lab: ResolvedLab, node_name: str | None = None) -> dict:
         topo_path = _require_file(lab)
         if self._use_api:

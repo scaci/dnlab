@@ -288,6 +288,10 @@
     _startRuntimeNode(nodeData.id);
   });
 
+  ContextMenu.on('restart-vd', (nodeData) => {
+    _restartRuntimeNode(nodeData.id);
+  });
+
   ContextMenu.on('rename', (nodeData) => {
     showModal('Rename Node', `
       <label>New name for <strong>${nodeData.id}</strong><br>
@@ -729,6 +733,21 @@
       showToast(`${nodeName} running`, 'success');
     } catch (e) {
       showToast(`Start failed: ${e.message}`, 'error');
+      await _refreshLabStatus();
+      if (refreshProperties) _refreshOpenNodeProperties(nodeName);
+    }
+  }
+
+  async function _restartRuntimeNode(nodeName, refreshProperties = false) {
+    if (!currentLabId) { showToast('Lab not deployed', 'warn'); return; }
+    try {
+      showToast(`Restarting ${nodeName}…`, 'info');
+      await API.Labs.restartNode(currentLabId, nodeName);
+      await _refreshLabStatus();
+      if (refreshProperties) _refreshOpenNodeProperties(nodeName);
+      showToast(`${nodeName} restarted`, 'success');
+    } catch (e) {
+      showToast(`Restart failed: ${e.message}`, 'error');
       await _refreshLabStatus();
       if (refreshProperties) _refreshOpenNodeProperties(nodeName);
     }

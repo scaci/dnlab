@@ -656,7 +656,7 @@ const Canvas = (() => {
       node.data('runtime_last_error', info.last_error || '');
       node.toggleClass('node-stopped', info.state === 'stopped');
       node.toggleClass('node-runtime-error', info.state === 'error');
-      node.toggleClass('node-runtime-busy', info.state === 'starting' || info.state === 'stopping');
+      node.toggleClass('node-runtime-busy', ['starting', 'stopping', 'restarting'].includes(info.state));
     });
   }
 
