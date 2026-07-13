@@ -70,6 +70,7 @@ def start(ctx: click.Context, no_remove_extra: bool) -> None:
     hosts = _load(ctx)
     daemon = ImageSyncDaemon(
         hosts, ctx.obj["state_file"],
+        hosts_file=str(resolve_hosts_file(ctx.obj["hosts_file"])),
         remove_extra=not no_remove_extra,
     )
 

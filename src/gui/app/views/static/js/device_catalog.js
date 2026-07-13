@@ -41,7 +41,10 @@ const DeviceCatalog = (() => {
 
   function load() {
     if (_loadPromise) return _loadPromise;
-    _loadPromise = fetch('config/devices.json', { credentials: 'same-origin' })
+    _loadPromise = fetch('config/devices.json', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();

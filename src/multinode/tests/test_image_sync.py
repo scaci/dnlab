@@ -120,6 +120,27 @@ def test_filter_images_include_then_exclude():
     assert set(out) == {"vrnetlab/xr:1.0", "dnlab-runtime-relay:latest"}
 
 
+def test_short_helper_names_match_prefixed_repositories():
+    cfg = ImageSyncConfig(
+        enabled=True,
+        include=["dnlab-runtime-relay", "dnlab-mgmt-anchor"],
+        exclude=[],
+        interval_seconds=60,
+    )
+    images = {
+        "dnlab-local/dnlab-runtime-relay:local": "sha:a",
+        "ghcr.io/scaci/dnlab-mgmt-anchor:0.1.2": "sha:b",
+        "ghcr.io/scaci/dnlab-jumphost:0.1.2": "sha:c",
+    }
+
+    out = isync.filter_images(images, cfg)
+
+    assert set(out) == {
+        "dnlab-local/dnlab-runtime-relay:local",
+        "ghcr.io/scaci/dnlab-mgmt-anchor:0.1.2",
+    }
+
+
 def test_default_image_sync_keeps_worker_aux_images_and_excludes_postgres():
     cfg = ImageSyncConfig()
     images = {
@@ -237,6 +258,35 @@ def test_reconcile_once_writes_state_file(tmp_path, monkeypatch):
     # Timings fields are present and sensible
     assert data["last_reconcile_duration_ms"] >= 0
     assert data["interval_seconds"] == 60
+
+
+def test_daemon_reloads_hosts_file_before_reconcile(tmp_path, monkeypatch):
+    initial = _hosts(include=["dnlab-runtime-relay"])
+    reloaded = _hosts(include=["*/dnlab-runtime-relay:*"])
+    seen_includes = []
+
+    monkeypatch.setattr(isync, "load_hosts_config", lambda path: reloaded)
+
+    def _fake_reconcile(hosts, state_file, *, remove_extra=True):
+        seen_includes.append(list(hosts.image_sync.include))
+        return isync.SyncState(
+            updated_at="2026-07-11T18:00:00+00:00",
+            interval_seconds=hosts.image_sync.interval_seconds,
+            master_host=hosts.master.host,
+            filter_include=list(hosts.image_sync.include),
+        )
+
+    monkeypatch.setattr(isync, "reconcile_once", _fake_reconcile)
+
+    daemon = isync.ImageSyncDaemon(
+        initial,
+        tmp_path / "state.json",
+        hosts_file="/etc/dnlab/hosts.yml",
+    )
+    daemon._do_reconcile()
+
+    assert seen_includes == [["*/dnlab-runtime-relay:*"]]
+    assert daemon.hosts is reloaded
 
 
 def test_state_file_write_is_atomic(tmp_path):
