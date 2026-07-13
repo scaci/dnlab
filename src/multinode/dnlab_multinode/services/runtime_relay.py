@@ -16,10 +16,7 @@ from dnlab_multinode.models.topology import DistributedTopology
 from dnlab_multinode.services.images import image_for
 from dnlab_multinode.services.ssh import SSHClient
 from dnlab_multinode.utils.ids import runtime_relay_port
-from dnlab_multinode.utils.naming import (
-    micro_vd_container_name,
-    runtime_relay_container_name,
-)
+from dnlab_multinode.utils.naming import micro_vd_container_name, runtime_relay_container_name
 
 log = logging.getLogger(__name__)
 
@@ -28,12 +25,18 @@ def generate_api_key() -> str:
 
 
 def _containers_for_host(
-    lab_name: str, plan: SchedulePlan, host_name: str,
+    lab_name: str,
+    plan: SchedulePlan,
+    host_name: str,
+    runtime_containers: dict[str, str] | None = None,
 ) -> list[str]:
     assignment = plan.assignments.get(host_name)
     if not assignment:
         return []
-    return [micro_vd_container_name(lab_name, vd) for vd in assignment.vd_names]
+    return [
+        (runtime_containers or {}).get(vd, micro_vd_container_name(lab_name, vd))
+        for vd in assignment.vd_names
+    ]
 
 
 def deploy_runtime_relays(
@@ -42,12 +45,18 @@ def deploy_runtime_relays(
     clients: dict[str, SSHClient],
     underlay_ips: dict[str, str],
     api_key: str,
+    runtime_containers: dict[str, str] | None = None,
 ) -> dict[str, dict]:
     port = runtime_relay_port(topo.name)
     results: dict[str, dict] = {}
 
     def _deploy_one(host_name: str):
-        containers = _containers_for_host(topo.name, plan, host_name)
+        containers = _containers_for_host(
+            topo.name,
+            plan,
+            host_name,
+            runtime_containers=runtime_containers,
+        )
         if not containers:
             return host_name, None
         client = clients[host_name]

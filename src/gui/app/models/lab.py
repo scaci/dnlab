@@ -13,6 +13,7 @@ class ContainerInfo(BaseModel):
     ipv6_address: str = ""
     lab_name: str = ""
     node_name: str = ""
+    apply_mode: str = ""
 
 
 class Lab(BaseModel):

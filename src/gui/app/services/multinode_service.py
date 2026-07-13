@@ -320,6 +320,68 @@ class MultinodeService:
             return report.to_dict()
         return await asyncio.to_thread(_status)
 
+    async def watch_containerlab_events(self, lab: ResolvedLab) -> dict:
+        """Start the per-host Containerlab events bridge when available."""
+        topo_path = _require_file(lab)
+        topic = _bus_tag(lab)
+        if self._use_api:
+            self._ensure_remote_event_bridge(topic)
+            return await self._api_post(
+                "/labs/events/watch",
+                self._lab_payload(lab, topology_file=topo_path),
+            )
+
+        def _emit(event: dict[str, Any]) -> None:
+            bus.publish(BusEvent(
+                lab=topic,
+                phase=str(event.get("phase") or "clab-events"),
+                status=str(event.get("status") or ""),
+                host=event.get("host"),
+                detail=str(event.get("detail") or ""),
+                elapsed_ms=int(event.get("elapsed_ms") or 0),
+                data=dict(event.get("data") or {}),
+            ))
+
+        def _start() -> dict:
+            from dnlab_multinode.services.clab_events import (
+                ContainerlabEventsError,
+                manager as clab_events_manager,
+            )
+            try:
+                handle = clab_events_manager.start(
+                    topology_file=str(topo_path),
+                    hosts_file=self._hosts_file,
+                    topic=topic,
+                    publish=_emit,
+                )
+                return {"watching": True, **handle.to_dict()}
+            except ContainerlabEventsError as exc:
+                return {"watching": False, "reason": str(exc)}
+
+        return await asyncio.to_thread(_start)
+
+    async def stop_containerlab_events(self, lab: ResolvedLab) -> dict:
+        """Stop the per-host Containerlab events bridge, if one is active."""
+        topo_path = _require_file(lab)
+        topic = _bus_tag(lab)
+        if self._use_api:
+            return await self._api_post(
+                "/labs/events/stop",
+                self._lab_payload(lab, topology_file=topo_path),
+            )
+
+        def _stop() -> dict:
+            from dnlab_multinode.services.clab_events import manager as clab_events_manager
+
+            return {
+                "stopped": clab_events_manager.stop(
+                    lab_name=lab.netname,
+                    topic=topic,
+                )
+            }
+
+        return await asyncio.to_thread(_stop)
+
     async def image_sync_status(self) -> dict | None:
         """Return the daemon's published state (or None if unavailable)."""
         if self._use_api:
@@ -499,6 +561,58 @@ class MultinodeService:
             finally:
                 log.info("deploy %s: released lock", lab.netname)
 
+    async def reconcile_topology_if_deployed(self, lab: ResolvedLab) -> dict:
+        """Apply edits to a running topology without exposing reconciliation.
+
+        The orchestrator skips the operation for stopped labs and while the
+        topology contains a newly declared node that has not been started yet.
+        """
+        topo_path = _require_file(lab)
+        _materialize_topology_metadata(topo_path)
+        if self._use_api:
+            return await self._api_post(
+                "/labs/reconcile-topology",
+                self._lab_payload(lab, topology_file=topo_path),
+                bridge_events=True,
+                topic=_bus_tag(lab),
+            )
+
+        cb = self._make_progress_cb(_bus_tag(lab))
+        async with _deploy_lock:
+            def _reconcile() -> dict:
+                from dnlab_multinode import DeployController
+                from dnlab_multinode.services.config import parse_topology
+                from dnlab_multinode.services import state as state_svc
+
+                topo = parse_topology(
+                    str(topo_path), hosts_file=self._hosts_file,
+                )
+                current = state_svc.load_state(topo.name, topo_path.parent)
+                if current is None or not current.dnlab_deployed:
+                    return {
+                        "attempted": False,
+                        "reconciled": False,
+                        "reason": "lab-not-deployed",
+                    }
+                pending = sorted(set(topo.nodes) - set(current.node_runtime))
+                if pending:
+                    return {
+                        "attempted": False,
+                        "reconciled": False,
+                        "reason": "pending-nodes",
+                        "pending_nodes": pending,
+                    }
+                updated = DeployController(
+                    str(topo_path), hosts_file=self._hosts_file, progress=cb,
+                ).run()
+                return {
+                    "attempted": True,
+                    "reconciled": True,
+                    "state": updated.to_dict(),
+                }
+
+            return await asyncio.to_thread(_reconcile)
+
     async def clean_persist_dirs(self, lab: ResolvedLab) -> dict:
         """Remove the lab's persist directory on every host.
 
@@ -644,14 +758,35 @@ class MultinodeService:
 
     async def node_start(self, lab: ResolvedLab, node_name: str) -> dict:
         topo_path = _require_file(lab)
+        _materialize_topology_metadata(topo_path)
         if self._use_api:
             return await self._api_post(
                 "/labs/nodes/start",
                 self._lab_payload(lab, topology_file=topo_path, node=node_name),
+                bridge_events=True,
+                topic=_bus_tag(lab),
             )
+        cb = self._make_progress_cb(_bus_tag(lab))
         async with _deploy_lock:
             def _start() -> dict:
-                from dnlab_multinode import NodeLifecycleController
+                from dnlab_multinode import DeployController, NodeLifecycleController
+                from dnlab_multinode.services.config import parse_topology
+                from dnlab_multinode.services import state as state_svc
+
+                topo = parse_topology(
+                    str(topo_path), hosts_file=self._hosts_file,
+                )
+                current = state_svc.load_state(topo.name, topo_path.parent)
+                if (
+                    current is not None
+                    and current.dnlab_deployed
+                    and node_name in topo.nodes
+                    and node_name not in current.node_runtime
+                ):
+                    state = DeployController(
+                        str(topo_path), hosts_file=self._hosts_file, progress=cb,
+                    ).run()
+                    return state.to_dict() if hasattr(state, "to_dict") else {}
 
                 state = NodeLifecycleController(
                     str(topo_path), hosts_file=self._hosts_file,
@@ -675,6 +810,23 @@ class MultinodeService:
                 ).stop(node_name)
                 return state.to_dict() if hasattr(state, "to_dict") else {}
             return await asyncio.to_thread(_stop)
+
+    async def node_restart(self, lab: ResolvedLab, node_name: str) -> dict:
+        topo_path = _require_file(lab)
+        if self._use_api:
+            return await self._api_post(
+                "/labs/nodes/restart",
+                self._lab_payload(lab, topology_file=topo_path, node=node_name),
+            )
+        async with _deploy_lock:
+            def _restart() -> dict:
+                from dnlab_multinode import NodeLifecycleController
+
+                state = NodeLifecycleController(
+                    str(topo_path), hosts_file=self._hosts_file,
+                ).restart(node_name)
+                return state.to_dict() if hasattr(state, "to_dict") else {}
+            return await asyncio.to_thread(_restart)
 
     async def node_reconcile(self, lab: ResolvedLab, node_name: str | None = None) -> dict:
         topo_path = _require_file(lab)

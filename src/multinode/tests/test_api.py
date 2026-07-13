@@ -92,6 +92,9 @@ class _FakeNodeLifecycleController:
     def start(self, node):
         return _FakeState()
 
+    def restart(self, node):
+        return _FakeState()
+
     def reconcile(self, node):
         return _FakeState()
 
@@ -116,6 +119,68 @@ def test_deploy_endpoint_returns_state_and_records_event(monkeypatch):
 
     assert res["lab_name"] == "demo"
     assert list(api._events["lab-1"])[0]["phase"] == "deploy"
+
+
+def test_reconcile_topology_skips_while_new_nodes_are_pending(monkeypatch):
+    topo = api.SimpleNamespace(name="demo", nodes={"r1": object(), "r2": object()})
+    state = api.SimpleNamespace(
+        dnlab_deployed=True,
+        node_runtime={"r1": object()},
+    )
+    monkeypatch.setattr(api, "parse_topology", lambda *args, **kwargs: topo)
+    monkeypatch.setattr(api.state_svc, "load_state", lambda *args, **kwargs: state)
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+
+    res = asyncio.run(
+        api.lab_reconcile_topology(api.LabRequest(topology_file="/tmp/demo.yml"))
+    )
+
+    assert res == {
+        "attempted": False,
+        "reconciled": False,
+        "reason": "pending-nodes",
+        "pending_nodes": ["r2"],
+    }
+
+
+def test_reconcile_topology_applies_when_runtime_is_complete(monkeypatch):
+    topo = api.SimpleNamespace(name="demo", nodes={"r1": object()})
+    state = api.SimpleNamespace(
+        dnlab_deployed=True,
+        node_runtime={"r1": object()},
+    )
+    monkeypatch.setattr(api, "parse_topology", lambda *args, **kwargs: topo)
+    monkeypatch.setattr(api.state_svc, "load_state", lambda *args, **kwargs: state)
+    monkeypatch.setattr(api, "DeployController", _FakeDeployController)
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+
+    res = asyncio.run(
+        api.lab_reconcile_topology(api.LabRequest(topology_file="/tmp/demo.yml"))
+    )
+
+    assert res["attempted"] is True
+    assert res["reconciled"] is True
+    assert res["state"]["dnlab_deployed"] is True
+
+
+def test_start_pending_node_materializes_topology_with_apply(monkeypatch):
+    topo = api.SimpleNamespace(name="demo", nodes={"r1": object(), "r2": object()})
+    state = api.SimpleNamespace(
+        dnlab_deployed=True,
+        node_runtime={"r1": object()},
+    )
+    monkeypatch.setattr(api, "parse_topology", lambda *args, **kwargs: topo)
+    monkeypatch.setattr(api.state_svc, "load_state", lambda *args, **kwargs: state)
+    monkeypatch.setattr(api, "DeployController", _FakeDeployController)
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+
+    res = asyncio.run(
+        api.lab_node_start(
+            api.NodeRequest(topology_file="/tmp/demo.yml", node="r2")
+        )
+    )
+
+    assert res["dnlab_deployed"] is True
 
 
 def test_status_endpoint_does_not_record_progress_events(monkeypatch):
@@ -155,6 +220,76 @@ def test_runtime_relay_endpoint_reads_state(monkeypatch):
         "api_key": "key",
         "relay_host": "worker1",
     }
+
+
+def test_events_watch_endpoint_starts_manager(monkeypatch):
+    class _Handle:
+        def to_dict(self):
+            return {"key": "lab-1:demo", "hosts": ["worker1"]}
+
+    seen = {}
+
+    class _Manager:
+        def start(self, **kwargs):
+            seen.update(kwargs)
+            kwargs["publish"]({
+                "phase": "clab-events",
+                "status": "ok",
+                "detail": "connected",
+            })
+            return _Handle()
+
+    monkeypatch.setattr(api, "clab_events_manager", _Manager())
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+    api._events.clear()
+
+    res = asyncio.run(
+        api.lab_events_watch(api.LabRequest(topology_file="/tmp/demo.yml", lab_id="lab-1"))
+    )
+
+    assert res["watching"] is True
+    assert seen["topic"] == "lab-1"
+    assert list(api._events["lab-1"])[0]["phase"] == "clab-events"
+
+
+def test_events_watch_endpoint_reports_unavailable(monkeypatch):
+    class _Manager:
+        def start(self, **kwargs):
+            raise api.ContainerlabEventsError("per-host-apply required")
+
+    monkeypatch.setattr(api, "clab_events_manager", _Manager())
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+
+    res = asyncio.run(
+        api.lab_events_watch(api.LabRequest(topology_file="/tmp/demo.yml", lab_id="lab-1"))
+    )
+
+    assert res == {"watching": False, "reason": "per-host-apply required"}
+
+
+def test_events_stop_endpoint_stops_manager(monkeypatch):
+    seen = {}
+
+    class _Manager:
+        def stop(self, **kwargs):
+            seen.update(kwargs)
+            return True
+
+    monkeypatch.setattr(api, "clab_events_manager", _Manager())
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+
+    res = asyncio.run(
+        api.lab_events_stop(
+            api.LabRequest(
+                topology_file="/tmp/demo.yml",
+                lab_name="demo",
+                lab_id="lab-1",
+            )
+        )
+    )
+
+    assert res == {"stopped": True}
+    assert seen == {"lab_name": "demo", "topic": "lab-1"}
 
 
 def test_jumphost_password_endpoint_reads_state(monkeypatch):

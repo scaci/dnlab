@@ -78,6 +78,7 @@ class NodeRuntimeState:
     topology_file: str = ""
     kind: str = ""
     image: str = ""
+    apply_mode: str = ""
     mgmt_ipv4: str = ""
     started_at: str = ""
     last_error: str = ""
@@ -148,6 +149,11 @@ class DeploymentState:
     topology_file: str
     deployed_at: str = ""
     dnlab_deployed: bool = True
+    runtime_mode: str = "per-vd"
+    containerlab_versions: dict[str, str] = field(default_factory=dict)
+    host_apply_status: dict[str, str] = field(default_factory=dict)
+    host_apply_plan: dict[str, list[dict]] = field(default_factory=dict)
+    reconcile_required: bool = False
     vrf_table_id: int = 0
     mgmt: MgmtState | None = None
     jumphost: JumphostState | None = None
@@ -189,6 +195,15 @@ class DeploymentState:
             topology_file=d["topology_file"],
             deployed_at=d.get("deployed_at", ""),
             dnlab_deployed=d.get("dnlab_deployed", True),
+            runtime_mode=d.get("runtime_mode", "per-vd"),
+            containerlab_versions=dict(d.get("containerlab_versions") or {}),
+            host_apply_status=dict(d.get("host_apply_status") or {}),
+            host_apply_plan={
+                str(host): [dict(entry) for entry in entries if isinstance(entry, dict)]
+                for host, entries in (d.get("host_apply_plan") or {}).items()
+                if isinstance(entries, list)
+            },
+            reconcile_required=bool(d.get("reconcile_required", False)),
             vrf_table_id=d.get("vrf_table_id", 0),
             phases_completed=d.get("phases_completed", []),
         )

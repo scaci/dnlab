@@ -80,6 +80,7 @@ class LabController:
                 ),
                 lab_name=lab.display_name,
                 node_name=node_name,
+                apply_mode=n.get("apply_mode", ""),
             ))
 
         if not containers:
@@ -92,6 +93,28 @@ class LabController:
         log.debug("get_lab_status(%s): %s (%d containers)",
                   lab.netname, status, len(containers))
         return Lab(name=lab.display_name, status=status, containers=containers)
+
+    async def watch_containerlab_events(self, lab: ResolvedLab) -> dict:
+        log.info("API events watch: %s (%s)", lab.display_name, lab.netname)
+        try:
+            return await multinode.watch_containerlab_events(lab)
+        except MultinodeServiceError as exc:
+            log.debug("Containerlab events watch unavailable: %s", exc)
+            return {"watching": False, "reason": str(exc)}
+        except Exception as exc:
+            log.exception("Containerlab events watch crashed")
+            return {"watching": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    async def stop_containerlab_events(self, lab: ResolvedLab) -> dict:
+        log.info("API events stop: %s (%s)", lab.display_name, lab.netname)
+        try:
+            return await multinode.stop_containerlab_events(lab)
+        except MultinodeServiceError as exc:
+            log.debug("Containerlab events stop unavailable: %s", exc)
+            return {"stopped": False, "reason": str(exc)}
+        except Exception as exc:
+            log.exception("Containerlab events stop crashed")
+            return {"stopped": False, "reason": f"{type(exc).__name__}: {exc}"}
 
     async def deploy(self, lab: ResolvedLab) -> dict:
         log.info("API deploy: %s (%s)", lab.display_name, lab.netname)
@@ -145,6 +168,18 @@ class LabController:
             return {"success": False, "output": str(exc)}
         except Exception as exc:
             log.exception("Node stop crashed")
+            return {"success": False, "output": f"{type(exc).__name__}: {exc}"}
+
+    async def node_restart(self, lab: ResolvedLab, node_name: str) -> dict:
+        log.info("API node_restart: %s/%s (%s)", lab.display_name, node_name, lab.netname)
+        try:
+            state = await multinode.node_restart(lab, node_name)
+            return {"success": True, "output": "", "state": state}
+        except MultinodeServiceError as exc:
+            log.error("Node restart failed: %s", exc)
+            return {"success": False, "output": str(exc)}
+        except Exception as exc:
+            log.exception("Node restart crashed")
             return {"success": False, "output": f"{type(exc).__name__}: {exc}"}
 
     async def node_reconcile(self, lab: ResolvedLab, node_name: str) -> dict:

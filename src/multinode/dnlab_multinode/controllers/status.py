@@ -13,6 +13,7 @@ concurrently with other controllers and can be polled by the GUI.
 
 from __future__ import annotations
 
+import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -22,6 +23,7 @@ from pathlib import Path
 from dnlab_multinode.models.state import DeploymentState
 from dnlab_multinode.models.topology import DistributedTopology
 from dnlab_multinode.services import state as state_svc
+from dnlab_multinode.services.clab_capabilities import PER_HOST_APPLY
 from dnlab_multinode.services.config import assign_sticky_mgmt_ipv4, parse_topology
 from dnlab_multinode.services.progress import ProgressCallback, make_timer
 from dnlab_multinode.services.ssh import SSHClient, create_clients
@@ -44,11 +46,15 @@ class NodeStatus:
     started_at: str = ""
     uptime_seconds: int = 0
     topology_file: str = ""
+    apply_mode: str = ""
     last_error: str = ""
     # Mappa delle Web UI esposte da clab via ``-p``: lista di
     # ``{container_port, host_port, bind_ip, proto}``. Vuota se il
     # nodo non ha Web UI dichiarate o il lab non è deployato.
     webui_ports: list[dict] = field(default_factory=list)
+    # Best-effort Containerlab runtime interface view, populated for
+    # per-host-apply deployments via ``inspect interfaces --format json``.
+    interfaces: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -65,8 +71,10 @@ class NodeStatus:
             "started_at": self.started_at,
             "uptime_seconds": self.uptime_seconds,
             "topology_file": self.topology_file,
+            "apply_mode": self.apply_mode,
             "last_error": self.last_error,
             "webui_ports": self.webui_ports,
+            "interfaces": self.interfaces,
         }
 
 
@@ -116,6 +124,11 @@ class StatusReport:
     deployed: bool
     dnlab_deployed: bool = False
     deployed_at: str = ""
+    runtime_mode: str = ""
+    containerlab_versions: dict[str, str] = field(default_factory=dict)
+    host_apply_status: dict[str, str] = field(default_factory=dict)
+    host_apply_plan: dict[str, list[dict]] = field(default_factory=dict)
+    reconcile_required: bool = False
     hosts: dict[str, HostStatus] = field(default_factory=dict)
     nodes: dict[str, NodeStatus] = field(default_factory=dict)
     cross_host_links: int = 0
@@ -128,6 +141,11 @@ class StatusReport:
             "deployed": self.deployed,
             "dnlab_deployed": self.dnlab_deployed,
             "deployed_at": self.deployed_at,
+            "runtime_mode": self.runtime_mode,
+            "containerlab_versions": self.containerlab_versions,
+            "host_apply_status": self.host_apply_status,
+            "host_apply_plan": self.host_apply_plan,
+            "reconcile_required": self.reconcile_required,
             "hosts": {n: h.to_dict() for n, h in self.hosts.items()},
             "nodes": {n: v.to_dict() for n, v in self.nodes.items()},
             "cross_host_links": self.cross_host_links,
@@ -168,6 +186,11 @@ class StatusController:
             deployed=state is not None,
             dnlab_deployed=state.dnlab_deployed if state else False,
             deployed_at=state.deployed_at if state else "",
+            runtime_mode=state.runtime_mode if state else "",
+            containerlab_versions=dict(state.containerlab_versions) if state else {},
+            host_apply_status=dict(state.host_apply_status) if state else {},
+            host_apply_plan=dict(state.host_apply_plan) if state else {},
+            reconcile_required=state.reconcile_required if state else False,
         )
 
         self._collect_host_summary(topo, state, report)
@@ -204,6 +227,7 @@ class StatusController:
                     )
 
             self._collect_node_status(topo, state, clients, report)
+            self._collect_interface_status(state, clients, report)
             self._collect_infra_status(state, clients, report)
 
             report.cross_host_links = len(state.vxlan_dataplane)
@@ -337,6 +361,7 @@ class StatusController:
                 scheduled_host=scheduled_host,
                 duplicate_hosts=duplicate_hosts,
                 topology_file=runtime.topology_file if runtime else "",
+                apply_mode=runtime.apply_mode if runtime else "",
                 last_error=runtime.last_error if runtime else "",
             )
 
@@ -392,6 +417,44 @@ class StatusController:
             elif ns.state == "running":
                 ns.uptime_seconds = 0
             _ = now  # placeholder; exact uptime needs inspect, skipped for perf
+
+    def _collect_interface_status(
+        self,
+        state: DeploymentState,
+        clients: dict[str, SSHClient],
+        report: StatusReport,
+    ) -> None:
+        if state.runtime_mode != PER_HOST_APPLY:
+            return
+
+        topology_by_host: dict[str, str] = {}
+        for node, runtime in state.node_runtime.items():
+            if runtime.host and runtime.topology_file and node in report.nodes:
+                topology_by_host.setdefault(runtime.host, runtime.topology_file)
+
+        for host_name, topology_file in topology_by_host.items():
+            host_status = report.hosts.get(host_name)
+            client = clients.get(host_name)
+            if not client or not host_status or not host_status.reachable:
+                continue
+            try:
+                raw = client.inspect_clab_interfaces(topology_file)
+                data = json.loads(raw or "[]")
+                by_node = _parse_clab_interfaces(data, set(report.nodes))
+            except Exception as exc:
+                log.warning(
+                    "Failed to inspect Containerlab interfaces on %s: %s",
+                    host_name, exc,
+                )
+                for ns in report.nodes.values():
+                    if ns.scheduled_host == host_name and not ns.last_error:
+                        ns.last_error = f"inspect interfaces failed: {exc}"
+                continue
+
+            for node, interfaces in by_node.items():
+                ns = report.nodes.get(node)
+                if ns:
+                    ns.interfaces = interfaces
 
     # ── infra status ───────────────────────────────────────────────
 
@@ -480,3 +543,87 @@ def _parse_docker_uptime(status: str) -> int:
     unit = m.group(2)
     mult = {"second": 1, "minute": 60, "hour": 3600, "day": 86400, "week": 604800}[unit]
     return n * mult
+
+
+def _parse_clab_interfaces(data, known_nodes: set[str]) -> dict[str, list[dict]]:
+    parsed: dict[str, list[dict]] = {}
+
+    def _walk(obj, node_hint: str = "") -> None:
+        if isinstance(obj, list):
+            for item in obj:
+                _walk(item, node_hint)
+            return
+        if not isinstance(obj, dict):
+            return
+
+        node = _node_from_interface_record(obj, node_hint, known_nodes)
+        iface = _interface_name_from_record(obj)
+        if node and iface:
+            parsed.setdefault(node, []).append(_normalise_interface_record(obj, iface))
+            return
+
+        for key, value in obj.items():
+            next_hint = key if key in known_nodes else node_hint
+            _walk(value, next_hint)
+
+    _walk(data)
+    for interfaces in parsed.values():
+        interfaces.sort(key=lambda item: item.get("name", ""))
+    return parsed
+
+
+def _node_from_interface_record(
+    record: dict,
+    node_hint: str,
+    known_nodes: set[str],
+) -> str:
+    candidates = [
+        node_hint,
+        str(record.get("node") or ""),
+        str(record.get("node_name") or ""),
+        str(record.get("nodeName") or ""),
+        str(record.get("container") or ""),
+        str(record.get("container_name") or ""),
+        str(record.get("containerName") or ""),
+    ]
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if not candidate:
+            continue
+        if candidate in known_nodes:
+            return candidate
+        for node in known_nodes:
+            if candidate.endswith(f"-{node}"):
+                return node
+    return ""
+
+
+def _interface_name_from_record(record: dict) -> str:
+    for key in ("interface", "interface_name", "interfaceName", "ifname", "name"):
+        value = record.get(key)
+        if value is not None:
+            return str(value)
+    return ""
+
+
+def _normalise_interface_record(record: dict, iface: str) -> dict:
+    out = {
+        "name": iface,
+        "alias": str(
+            record.get("alias")
+            or record.get("interface_alias")
+            or record.get("interfaceAlias")
+            or ""
+        ),
+        "state": str(
+            record.get("state")
+            or record.get("oper_state")
+            or record.get("operState")
+            or ""
+        ),
+        "type": str(record.get("type") or ""),
+        "mac": str(record.get("mac") or record.get("mac_address") or ""),
+        "mtu": record.get("mtu", ""),
+        "peer": str(record.get("peer") or record.get("peer_name") or ""),
+    }
+    return {key: value for key, value in out.items() if value not in ("", None)}

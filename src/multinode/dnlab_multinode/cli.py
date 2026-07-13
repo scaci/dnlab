@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -268,6 +269,30 @@ def get_status(topo: str, hosts_file: str | None, as_json: bool) -> None:
 
         console.print(f"\n[bold]Lab:[/bold] {report.lab_name}")
         console.print(f"[bold]Deployed at:[/bold] {report.deployed_at}")
+        if report.runtime_mode:
+            console.print(f"[bold]Runtime mode:[/bold] {report.runtime_mode}")
+        if report.reconcile_required:
+            console.print(
+                "[yellow]Reconcile required:[/yellow] previous apply did not "
+                "finish cleanly on every host"
+            )
+        if report.host_apply_status:
+            from dnlab_multinode.services.clab_apply_plan import dicts_summary
+
+            apply_table = Table(title="Containerlab apply")
+            apply_table.add_column("Host")
+            apply_table.add_column("Status")
+            apply_table.add_column("Version")
+            apply_table.add_column("Plan")
+            for host_name in sorted(report.host_apply_status):
+                plan_entries = report.host_apply_plan.get(host_name, [])
+                apply_table.add_row(
+                    host_name,
+                    report.host_apply_status[host_name],
+                    report.containerlab_versions.get(host_name, "-"),
+                    dicts_summary(plan_entries) or "-",
+                )
+            console.print(apply_table)
 
         h_table = Table(title="Hosts")
         h_table.add_column("Host")
@@ -288,6 +313,7 @@ def get_status(topo: str, hosts_file: str | None, as_json: bool) -> None:
         n_table.add_column("Name")
         n_table.add_column("Host")
         n_table.add_column("Kind")
+        n_table.add_column("Apply")
         n_table.add_column("Mgmt IPv4")
         n_table.add_column("State")
         for ns in report.nodes.values():
@@ -296,7 +322,8 @@ def get_status(topo: str, hosts_file: str | None, as_json: bool) -> None:
                 "unreachable": "magenta",
             }.get(ns.state, "white")
             n_table.add_row(
-                ns.name, ns.host or "-", ns.kind, ns.mgmt_ipv4 or "-",
+                ns.name, ns.host or "-", ns.kind, ns.apply_mode or "-",
+                ns.mgmt_ipv4 or "-",
                 f"[{color}]{ns.state}[/{color}]",
             )
         console.print(n_table)
@@ -393,6 +420,24 @@ def node_start(node: str, topo: str, hosts_file: str | None) -> None:
 
     try:
         state = NodeLifecycleController(topo, hosts_file=hosts_file).start(node)
+        runtime = state.node_runtime[node]
+        console.print(f"[green][✓] {node}: {runtime.state}[/green]")
+    except Exception as e:
+        console.print(f"[red][✗] {e}[/red]")
+        sys.exit(1)
+
+
+@node_group.command("restart")
+@click.argument("node")
+@click.option("-t", "--topo", required=True, help="Path to topology YAML file")
+@click.option("--hosts", "hosts_file", default=None, help="Path to global hosts file")
+def node_restart(node: str, topo: str, hosts_file: str | None) -> None:
+    from dnlab_multinode.controllers.node import NodeLifecycleController
+
+    try:
+        state = NodeLifecycleController(
+            topo, hosts_file=hosts_file,
+        ).restart(node)
         runtime = state.node_runtime[node]
         console.print(f"[green][✓] {node}: {runtime.state}[/green]")
     except Exception as e:

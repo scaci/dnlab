@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from dnlab_multinode.controllers.status import (
-    StatusController, _parse_docker_uptime,
+    StatusController, _parse_clab_interfaces, _parse_docker_uptime,
 )
 from dnlab_multinode.controllers.node import (
     NodeLifecycleController, NodeLifecycleError,
 )
 from dnlab_multinode.models.state import (
     DeploymentState, HostScheduleState, JumphostState, DnsState,
-    RuntimeRelayState,
+    NodeRuntimeState, RuntimeLinkState, RuntimeRelayState,
 )
 from dnlab_multinode.services import state as state_svc
 
@@ -90,6 +90,26 @@ def test_status_unreachable_hosts_marked(tmp_path, monkeypatch):
 
     # Fabricate a deployment state pinning R1→master, R2→worker1.
     st = DeploymentState(lab_name="lab", topology_file=str(topo), deployed_at="2026-01-01")
+    st.runtime_mode = "per-host-apply"
+    st.containerlab_versions = {"master": "0.77.0", "worker1": "0.77.0"}
+    st.host_apply_status = {"master": "applied", "worker1": "error"}
+    st.host_apply_plan = {
+        "master": [
+            {
+                "action": "deploy lab",
+                "details": "lab",
+                "nodes": [],
+            }
+        ],
+        "worker1": [
+            {
+                "action": "recreated nodes",
+                "details": "R2 (config drift: Env)",
+                "nodes": ["R2"],
+            }
+        ],
+    }
+    st.reconcile_required = True
     st.scheduling = {
         "master": HostScheduleState(
             host="10.0.0.10", topology_file="lab-master.yml",
@@ -130,6 +150,11 @@ def test_status_unreachable_hosts_marked(tmp_path, monkeypatch):
 
     assert report.deployed is True
     assert report.deployed_at == "2026-01-01"
+    assert report.runtime_mode == "per-host-apply"
+    assert report.containerlab_versions == {"master": "0.77.0", "worker1": "0.77.0"}
+    assert report.host_apply_status == {"master": "applied", "worker1": "error"}
+    assert report.host_apply_plan["worker1"][0]["action"] == "recreated nodes"
+    assert report.reconcile_required is True
     assert all(not h.reachable for h in report.hosts.values())
 
     # Scheduling snapshot still surfaces even if hosts are offline.
@@ -145,6 +170,9 @@ def test_status_unreachable_hosts_marked(tmp_path, monkeypatch):
     assert report.infra.runtime_relays["worker1"]["allowed"] == 1
     assert report.infra.runtime_relays["worker1"]["running"] is None
     assert report.to_dict()["infra"]["runtime_relays"]["worker1"]["port"] == 23042
+    assert report.to_dict()["runtime_mode"] == "per-host-apply"
+    assert report.to_dict()["host_apply_status"]["worker1"] == "error"
+    assert report.to_dict()["host_apply_plan"]["worker1"][0]["nodes"] == ["R2"]
 
 
 def _save_state_with_r1_on(topo: Path, host_name: str) -> None:
@@ -220,6 +248,84 @@ def test_status_has_no_mismatch_when_live_matches_state(tmp_path, monkeypatch):
     assert report.nodes["R1"].state == "running"
 
 
+def test_status_collects_per_host_containerlab_interfaces(tmp_path, monkeypatch):
+    topo = _write_inputs(tmp_path)
+    _save_state_with_r1_on(topo, "worker1")
+    state = state_svc.load_state("lab", tmp_path)
+    state.runtime_mode = "per-host-apply"
+    state.node_runtime["R1"].topology_file = "/tmp/dnlab-lab-worker1.clab.yml"
+    state.node_runtime["R1"].apply_mode = "live"
+    state_svc.save_state(state, tmp_path)
+    _fake_reachable_docker(
+        monkeypatch,
+        {
+            "worker1": "clab-lab-R1\trunning\tUp 3 minutes",
+            "worker2": "",
+        },
+    )
+
+    inspected = []
+
+    def _fake_inspect_interfaces(self, topology_file):
+        inspected.append((self.name, topology_file))
+        return """
+        [
+          {
+            "node_name": "R1",
+            "interface_name": "eth1",
+            "alias": "ethernet-1/1",
+            "state": "up",
+            "type": "veth",
+            "mac": "aa:bb:cc:dd:ee:ff",
+            "mtu": 9500
+          }
+        ]
+        """
+
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.inspect_clab_interfaces",
+        _fake_inspect_interfaces,
+    )
+
+    ctrl = StatusController(str(topo), hosts_file=str(tmp_path / "hosts.yml"))
+    report = ctrl.run()
+
+    assert inspected == [("worker1", "/tmp/dnlab-lab-worker1.clab.yml")]
+    assert report.nodes["R1"].interfaces == [
+        {
+            "name": "eth1",
+            "alias": "ethernet-1/1",
+            "state": "up",
+            "type": "veth",
+            "mac": "aa:bb:cc:dd:ee:ff",
+            "mtu": 9500,
+        }
+    ]
+    assert report.to_dict()["nodes"]["R1"]["interfaces"][0]["name"] == "eth1"
+    assert report.nodes["R1"].apply_mode == "live"
+    assert report.to_dict()["nodes"]["R1"]["apply_mode"] == "live"
+
+
+def test_parse_clab_interfaces_accepts_nested_node_maps():
+    data = {
+        "lab": {
+            "R1": [
+                {"name": "eth2", "state": "down"},
+                {"ifname": "eth1", "oper_state": "up"},
+            ],
+            "R2": {"interfaces": [{"interface": "eth1", "peer": "R1:eth1"}]},
+        }
+    }
+
+    assert _parse_clab_interfaces(data, {"R1", "R2"}) == {
+        "R1": [
+            {"name": "eth1", "state": "up"},
+            {"name": "eth2", "state": "down"},
+        ],
+        "R2": [{"name": "eth1", "peer": "R1:eth1"}],
+    }
+
+
 def test_legacy_runtime_status_still_finds_legacy_container(tmp_path, monkeypatch):
     topo = _write_inputs(tmp_path)
     _save_state_with_r1_on(topo, "worker1")
@@ -263,6 +369,274 @@ def test_node_lifecycle_rejects_legacy_per_host_runtime(tmp_path):
         assert "per-VD runtime" in str(exc)
     else:
         raise AssertionError("legacy runtime stop must be rejected")
+
+
+def test_node_lifecycle_start_unknown_runtime_node_says_apply_first(tmp_path):
+    topo = _write_inputs(tmp_path)
+    _save_state_with_r1_on(topo, "worker1")
+    state = state_svc.load_state("lab", tmp_path)
+    state.runtime_mode = "per-host-apply"
+    state.node_runtime.pop("R2", None)
+    state_svc.save_state(state, tmp_path)
+
+    ctrl = NodeLifecycleController(str(topo), hosts_file=str(tmp_path / "hosts.yml"))
+
+    try:
+        ctrl.start("R2")
+    except NodeLifecycleError as exc:
+        assert "apply lab changes" in str(exc)
+    else:
+        raise AssertionError("topology node missing from runtime must require apply")
+
+
+def test_node_lifecycle_uses_containerlab_stop_for_per_host_runtime(
+    tmp_path, monkeypatch,
+):
+    topo = _write_inputs(tmp_path)
+    _save_state_with_r1_on(topo, "worker1")
+    state = state_svc.load_state("lab", tmp_path)
+    state.runtime_mode = "per-host-apply"
+    state.node_runtime["R1"].topology_file = "/tmp/dnlab-lab-worker1.clab.yml"
+    state_svc.save_state(state, tmp_path)
+    commands = []
+
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.connect",
+        lambda self: setattr(self, "_client", object()),
+    )
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.close",
+        lambda self: setattr(self, "_client", None),
+    )
+
+    def fake_lifecycle(self, action, topology_file, node):
+        commands.append((self.name, action, topology_file, node))
+        return "ok"
+
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.lifecycle_clab",
+        fake_lifecycle,
+    )
+
+    ctrl = NodeLifecycleController(
+        str(topo), hosts_file=str(tmp_path / "hosts.yml"),
+    )
+    result = ctrl.stop("R1")
+
+    assert commands == [
+        ("worker1", "stop", "/tmp/dnlab-lab-worker1.clab.yml", "R1"),
+    ]
+    assert result.node_runtime["R1"].state == "stopped"
+
+
+def test_node_lifecycle_start_per_host_does_not_trust_stale_running_state(
+    tmp_path, monkeypatch,
+):
+    topo = _write_inputs(tmp_path)
+    _save_state_with_r1_on(topo, "worker1")
+    state = state_svc.load_state("lab", tmp_path)
+    state.runtime_mode = "per-host-apply"
+    state.node_runtime["R1"].state = "running"
+    state.node_runtime["R1"].topology_file = "/tmp/dnlab-lab-worker1.clab.yml"
+    state_svc.save_state(state, tmp_path)
+    commands = []
+
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.connect",
+        lambda self: setattr(self, "_client", object()),
+    )
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.close",
+        lambda self: setattr(self, "_client", None),
+    )
+
+    def fake_lifecycle(self, action, topology_file, node):
+        commands.append((self.name, action, topology_file, node))
+        return "ok"
+
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.lifecycle_clab",
+        fake_lifecycle,
+    )
+    monkeypatch.setattr(
+        NodeLifecycleController, "_wait_container_running",
+        staticmethod(lambda client, container, timeout: None),
+    )
+    monkeypatch.setattr(
+        NodeLifecycleController, "_set_default_route",
+        lambda self, client, container: None,
+    )
+
+    ctrl = NodeLifecycleController(
+        str(topo), hosts_file=str(tmp_path / "hosts.yml"),
+    )
+    result = ctrl.start("R1")
+
+    assert commands == [
+        ("worker1", "start", "/tmp/dnlab-lab-worker1.clab.yml", "R1"),
+    ]
+    assert result.node_runtime["R1"].state == "running"
+
+
+def test_node_lifecycle_uses_containerlab_restart_for_per_host_runtime(
+    tmp_path, monkeypatch,
+):
+    topo = _write_inputs(tmp_path)
+    _save_state_with_r1_on(topo, "worker1")
+    state = state_svc.load_state("lab", tmp_path)
+    state.runtime_mode = "per-host-apply"
+    state.node_runtime["R1"].topology_file = "/tmp/dnlab-lab-worker1.clab.yml"
+    state_svc.save_state(state, tmp_path)
+    commands = []
+
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.connect",
+        lambda self: setattr(self, "_client", object()),
+    )
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.close",
+        lambda self: setattr(self, "_client", None),
+    )
+
+    def fake_lifecycle(self, action, topology_file, node):
+        commands.append((self.name, action, topology_file, node))
+        return "ok"
+
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.lifecycle_clab",
+        fake_lifecycle,
+    )
+    monkeypatch.setattr(
+        NodeLifecycleController, "_wait_container_running",
+        staticmethod(lambda client, container, timeout: None),
+    )
+    monkeypatch.setattr(
+        NodeLifecycleController, "_set_default_route",
+        lambda self, client, container: None,
+    )
+
+    ctrl = NodeLifecycleController(
+        str(topo), hosts_file=str(tmp_path / "hosts.yml"),
+    )
+    result = ctrl.restart("R1")
+
+    assert commands == [
+        ("worker1", "restart", "/tmp/dnlab-lab-worker1.clab.yml", "R1"),
+    ]
+    assert result.node_runtime["R1"].state == "running"
+
+
+def test_node_lifecycle_reconcile_per_host_recreates_dnlab_owned_links(
+    tmp_path, monkeypatch,
+):
+    topo = _write_inputs(tmp_path)
+    st = DeploymentState(
+        lab_name="lab",
+        topology_file=str(topo),
+        deployed_at="2026-01-01",
+        runtime_mode="per-host-apply",
+    )
+    st.scheduling = {
+        "master": HostScheduleState(
+            host="10.0.0.10",
+            topology_file="/tmp/dnlab-lab-master.clab.yml",
+            vd=["R1"],
+        ),
+        "worker1": HostScheduleState(
+            host="10.0.0.11",
+            topology_file="/tmp/dnlab-lab-worker1.clab.yml",
+            vd=["R2"],
+        ),
+    }
+    st.node_runtime = {
+        "R1": NodeRuntimeState(
+            node="R1",
+            state="running",
+            host="master",
+            container="clab-lab-R1",
+            topology_file="/tmp/dnlab-lab-master.clab.yml",
+        ),
+        "R2": NodeRuntimeState(
+            node="R2",
+            state="running",
+            host="worker1",
+            container="clab-lab-R2",
+            topology_file="/tmp/dnlab-lab-worker1.clab.yml",
+        ),
+    }
+    st.runtime_links = [
+        RuntimeLinkState(
+            id="same",
+            link_type="same_host",
+            endpoint_a={"node": "R1", "iface": "eth1"},
+            endpoint_b={"node": "R3", "iface": "eth1"},
+            host_a="master",
+            host_b="master",
+        ),
+        RuntimeLinkState(
+            id="cross",
+            link_type="cross_host",
+            endpoint_a={"node": "R1", "iface": "eth2"},
+            endpoint_b={"node": "R2", "iface": "eth2"},
+            host_a="master",
+            host_b="worker1",
+            host_endpoint_a="e1",
+            host_endpoint_b="e2",
+            vxlan_id=1001,
+        ),
+        RuntimeLinkState(
+            id="realnet",
+            link_type="real_net",
+            endpoint_a={"node": "R1", "iface": "eth3"},
+            endpoint_b={"real_net": "wan"},
+            host_a="master",
+            host_b="master",
+        ),
+    ]
+    state_svc.save_state(st, tmp_path)
+
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.connect",
+        lambda self: setattr(self, "_client", object()),
+    )
+    monkeypatch.setattr(
+        "dnlab_multinode.services.ssh.SSHClient.close",
+        lambda self: setattr(self, "_client", None),
+    )
+    created = []
+
+    def fake_create_link(
+        link, clients, underlay_ips=None, running_nodes=None, container_names=None,
+    ):
+        created.append((link.id, link.link_type, dict(underlay_ips or {}), set(running_nodes or set())))
+        link.state = "up"
+        return link
+
+    monkeypatch.setattr(
+        "dnlab_multinode.controllers.node.runtime_links_svc.create_link",
+        fake_create_link,
+    )
+
+    ctrl = NodeLifecycleController(
+        str(topo), hosts_file=str(tmp_path / "hosts.yml"),
+    )
+    result = ctrl.reconcile("R1")
+
+    assert created == [
+        (
+            "cross",
+            "cross_host",
+            {"master": "10.0.0.10", "worker1": "10.0.0.11"},
+            {"R1", "R2"},
+        ),
+        (
+            "realnet",
+            "real_net",
+            {"master": "10.0.0.10", "worker1": "10.0.0.11"},
+            {"R1", "R2"},
+        ),
+    ]
+    assert result.runtime_links[1].state == "up"
 
 
 def test_status_keeps_missing_when_container_absent_everywhere(tmp_path, monkeypatch):

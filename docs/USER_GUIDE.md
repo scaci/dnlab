@@ -85,6 +85,11 @@ During deployment and teardown, the footer shows live events. A deployed lab has
 active dNLab runtime infrastructure; each virtual device also has its own state
 such as `running`, `stopped`, `starting`, `stopping` or `error`.
 
+If an administrator enables the experimental per-host Containerlab runtime,
+the same footer can also show Containerlab runtime events and resync summaries.
+The default runtime remains the per-device mode unless that feature is enabled
+for the deployment.
+
 ![Running lab](images/user-lab-running.png)
 
 Use Stop or Destroy to tear down a lab when you are finished. Supported virtual
@@ -103,6 +108,7 @@ whole lab.
 Common actions include:
 
 - start or stop a single virtual device;
+- restart a single virtual device when the deployed runtime supports it;
 - reconcile a device when the backend supports live repair;
 - open console or logs;
 - open a device Web UI;

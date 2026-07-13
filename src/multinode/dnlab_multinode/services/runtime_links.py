@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import shlex
 
 from dnlab_multinode.models.schedule import SchedulePlan
 from dnlab_multinode.models.state import RuntimeLinkState
@@ -70,6 +71,7 @@ def create_link(
     clients: dict[str, SSHClient],
     underlay_ips: dict[str, str] | None = None,
     running_nodes: set[str] | None = None,
+    container_names: dict[str, str] | None = None,
 ) -> RuntimeLinkState:
     """Create one runtime link if both VD endpoints are running."""
     underlay_ips = underlay_ips or {}
@@ -84,9 +86,9 @@ def create_link(
         if link.link_type == "same_host":
             _create_same_host(link, clients)
         elif link.link_type == "cross_host":
-            _create_cross_host(link, clients, underlay_ips)
+            _create_cross_host(link, clients, underlay_ips, container_names)
         elif link.link_type == "real_net":
-            _create_realnet(link, clients)
+            _create_realnet(link, clients, container_names)
         else:
             raise ValueError(f"unsupported link_type {link.link_type!r}")
         link.state = "up"
@@ -132,10 +134,13 @@ def reconcile_all_links(
     clients: dict[str, SSHClient],
     underlay_ips: dict[str, str],
     running_nodes: set[str],
+    container_names: dict[str, str] | None = None,
 ) -> list[RuntimeLinkState]:
     reconciled = []
     for link in links:
-        reconciled.append(create_link(link, clients, underlay_ips, running_nodes))
+        reconciled.append(create_link(
+            link, clients, underlay_ips, running_nodes, container_names,
+        ))
     return reconciled
 
 
@@ -145,11 +150,14 @@ def reconcile_node_links(
     clients: dict[str, SSHClient],
     underlay_ips: dict[str, str],
     running_nodes: set[str],
+    container_names: dict[str, str] | None = None,
 ) -> list[RuntimeLinkState]:
     reconciled = []
     for link in links:
         if node in _nodes_in_link(link):
-            reconciled.append(create_link(link, clients, underlay_ips, running_nodes))
+            reconciled.append(create_link(
+                link, clients, underlay_ips, running_nodes, container_names,
+            ))
     return reconciled
 
 
@@ -176,9 +184,17 @@ def _create_cross_host(
     link: RuntimeLinkState,
     clients: dict[str, SSHClient],
     underlay_ips: dict[str, str],
+    container_names: dict[str, str] | None,
 ) -> None:
     src = clients[link.host_a]
     dst = clients[link.host_b]
+    if container_names is not None:
+        _ensure_host_endpoint(
+            src, link.endpoint_a, link.host_endpoint_a, container_names,
+        )
+        _ensure_host_endpoint(
+            dst, link.endpoint_b, link.host_endpoint_b, container_names,
+        )
     src.run(
         f"ip link show {_vxlan_altname(link.host_endpoint_a)} >/dev/null 2>&1 || "
         f"containerlab tools vxlan create --remote {underlay_ips[link.host_b]} "
@@ -191,6 +207,49 @@ def _create_cross_host(
     )
 
 
+def _ensure_host_endpoint(
+    client: SSHClient,
+    endpoint: dict[str, str],
+    host_iface: str,
+    container_names: dict[str, str],
+) -> None:
+    """Restore a missing Containerlab node-to-host veth before VxLAN attach.
+
+    Containerlab 0.77 may return success while a special ``host`` endpoint
+    failed to materialize.  The supported ``tools veth`` primitive makes the
+    desired topology convergent without recreating the VD or its persistent
+    disk.
+    """
+    rc, _, _ = client.run_no_check(
+        f"ip link show {shlex.quote(host_iface)} >/dev/null 2>&1"
+    )
+    if rc == 0:
+        return
+
+    node = endpoint.get("node", "")
+    iface = endpoint.get("iface", "")
+    container = container_names.get(node, "")
+    if not node or not iface or not container:
+        raise RuntimeError(
+            f"cannot restore host endpoint {host_iface!r}: "
+            f"missing runtime container for node {node!r}"
+        )
+
+    client.run(
+        "containerlab tools veth create "
+        f"--a-endpoint {shlex.quote(f'{container}:{iface}')} "
+        f"--b-endpoint {shlex.quote(f'host:{host_iface}')}",
+    )
+    rc, _, err = client.run_no_check(
+        f"ip link show {shlex.quote(host_iface)} >/dev/null 2>&1"
+    )
+    if rc != 0:
+        raise RuntimeError(
+            f"Containerlab reported success but host endpoint {host_iface!r} "
+            f"is still missing: {err.strip()}"
+        )
+
+
 def _delete_cross_host(link: RuntimeLinkState, clients: dict[str, SSHClient]) -> None:
     for host, iface in [
         (link.host_a, link.host_endpoint_a),
@@ -199,10 +258,19 @@ def _delete_cross_host(link: RuntimeLinkState, clients: dict[str, SSHClient]) ->
         client = clients.get(host)
         if client:
             client.run(f"ip link delete {_vxlan_altname(iface)} 2>/dev/null", check=False)
+            client.run(f"ip link delete {iface} 2>/dev/null", check=False)
 
 
-def _create_realnet(link: RuntimeLinkState, clients: dict[str, SSHClient]) -> None:
+def _create_realnet(
+    link: RuntimeLinkState,
+    clients: dict[str, SSHClient],
+    container_names: dict[str, str] | None,
+) -> None:
     client = clients[link.host_a]
+    if container_names is not None:
+        _ensure_host_endpoint(
+            client, link.endpoint_a, link.host_endpoint_a, container_names,
+        )
     client.run(f"ip link set {link.host_endpoint_a} up")
     client.run(f"ip link set {link.host_endpoint_a} master {link.host_endpoint_b}")
 
@@ -210,7 +278,9 @@ def _create_realnet(link: RuntimeLinkState, clients: dict[str, SSHClient]) -> No
 def _delete_realnet(link: RuntimeLinkState, clients: dict[str, SSHClient]) -> None:
     client = clients.get(link.host_a)
     if client:
-        client.run(f"ip link set {link.host_endpoint_a} nomaster 2>/dev/null", check=False)
+        client.run(
+            f"ip link delete {link.host_endpoint_a} 2>/dev/null", check=False,
+        )
 
 
 def _nodes_in_link(link: RuntimeLinkState) -> set[str]:

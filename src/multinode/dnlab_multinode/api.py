@@ -40,6 +40,10 @@ from dnlab_multinode.services.lab_cleanup import (
     reconcile_once as reconcile_lab_cleanup_once,
 )
 from dnlab_multinode.services import state as state_svc
+from dnlab_multinode.services.clab_events import (
+    ContainerlabEventsError,
+    manager as clab_events_manager,
+)
 from dnlab_multinode.services.config import parse_topology
 from dnlab_multinode.services.logging_config import setup_service_logging
 from dnlab_multinode.services.paths import PATHS, persist_dir_for_node
@@ -301,6 +305,54 @@ async def lab_deploy(req: LabRequest) -> dict[str, Any]:
             raise HTTPException(422, str(exc)) from exc
 
 
+@app.post("/labs/reconcile-topology")
+async def lab_reconcile_topology(req: LabRequest) -> dict[str, Any]:
+    """Apply topology-only changes to an already materialized runtime.
+
+    A topology containing nodes that are not in runtime state is deliberately
+    left pending.  Starting such a node is the user action that materializes
+    it (and all of its links); this prevents a link edit from unexpectedly
+    booting a node that is still being configured in the GUI.
+    """
+    async with _mutating_lock:
+        try:
+            def _run() -> dict[str, Any]:
+                topo = parse_topology(req.topology_file, hosts_file=req.hosts_file)
+                state = state_svc.load_state(
+                    topo.name, Path(req.topology_file).parent,
+                )
+                if state is None or not state.dnlab_deployed:
+                    return {
+                        "attempted": False,
+                        "reconciled": False,
+                        "reason": "lab-not-deployed",
+                    }
+
+                pending = sorted(set(topo.nodes) - set(state.node_runtime))
+                if pending:
+                    return {
+                        "attempted": False,
+                        "reconciled": False,
+                        "reason": "pending-nodes",
+                        "pending_nodes": pending,
+                    }
+
+                updated = DeployController(
+                    req.topology_file,
+                    hosts_file=req.hosts_file,
+                    progress=_progress(req),
+                ).run()
+                return {
+                    "attempted": True,
+                    "reconciled": True,
+                    "state": updated.to_dict(),
+                }
+
+            return await asyncio.to_thread(_run)
+        except Exception as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+
 @app.post("/labs/destroy")
 async def lab_destroy(req: LabRequest) -> dict[str, Any]:
     async with _mutating_lock:
@@ -364,6 +416,11 @@ async def lab_node_stop(req: NodeRequest) -> dict[str, Any]:
     return await _node_mutation(req, "stop")
 
 
+@app.post("/labs/nodes/restart")
+async def lab_node_restart(req: NodeRequest) -> dict[str, Any]:
+    return await _node_mutation(req, "restart")
+
+
 @app.post("/labs/nodes/reconcile")
 async def lab_node_reconcile(req: NodeRequest) -> dict[str, Any]:
     return await _node_mutation(req, "reconcile")
@@ -398,6 +455,43 @@ async def lab_runtime_relay(req: NodeRequest) -> dict[str, Any]:
         return await asyncio.to_thread(_runtime_relay, req)
     except Exception as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/labs/events/watch")
+async def lab_events_watch(req: LabRequest) -> dict[str, Any]:
+    try:
+        handle = await asyncio.to_thread(
+            lambda: clab_events_manager.start(
+                topology_file=req.topology_file,
+                hosts_file=req.hosts_file,
+                topic=_topic(req),
+                publish=_publish_dict(_topic(req)),
+            )
+        )
+        return {"watching": True, **handle.to_dict()}
+    except ContainerlabEventsError as exc:
+        return {"watching": False, "reason": str(exc)}
+    except Exception as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@app.post("/labs/events/stop")
+async def lab_events_stop(req: LabRequest) -> dict[str, Any]:
+    try:
+        stopped = await asyncio.to_thread(
+            lambda: clab_events_manager.stop(
+                lab_name=_lab_name(req),
+                topic=_topic(req),
+            )
+        )
+        return {"stopped": stopped}
+    except Exception as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@app.get("/labs/events/watchers")
+async def lab_events_watchers() -> dict[str, Any]:
+    return {"watchers": clab_events_manager.status()}
 
 
 @app.post("/labs/follow-rabbit/sessions")
@@ -480,11 +574,36 @@ async def _node_mutation(req: NodeRequest, action: str) -> dict[str, Any]:
     async with _mutating_lock:
         try:
             def _run():
-                ctrl = NodeLifecycleController(req.topology_file, hosts_file=req.hosts_file)
+                if action == "start":
+                    topo = parse_topology(
+                        req.topology_file, hosts_file=req.hosts_file,
+                    )
+                    state = state_svc.load_state(
+                        topo.name, Path(req.topology_file).parent,
+                    )
+                    if (
+                        state is not None
+                        and state.dnlab_deployed
+                        and req.node in topo.nodes
+                        and req.node not in state.node_runtime
+                    ):
+                        # Containerlab apply creates new nodes in the running
+                        # state.  Do not issue a second `start` afterwards.
+                        return DeployController(
+                            req.topology_file,
+                            hosts_file=req.hosts_file,
+                            progress=_progress(req),
+                        ).run()
+
+                ctrl = NodeLifecycleController(
+                    req.topology_file, hosts_file=req.hosts_file,
+                )
                 if action == "start":
                     return ctrl.start(req.node)
                 if action == "stop":
                     return ctrl.stop(req.node)
+                if action == "restart":
+                    return ctrl.restart(req.node)
                 return ctrl.reconcile(req.node)
 
             state = await asyncio.to_thread(_run)
@@ -513,15 +632,26 @@ def _follow_rabbit_progress(req: LabRequest):
     topic = _topic(req)
 
     def _publish(event: dict[str, Any]) -> None:
-        event["topic"] = topic
-        _events[topic].append(event)
-        for loop, q in list(_subscribers[topic]):
-            try:
-                loop.call_soon_threadsafe(_queue_event, q, event)
-            except RuntimeError:
-                _subscribers[topic].discard((loop, q))
+        _publish_event(topic, event)
 
     return _publish
+
+
+def _publish_dict(topic: str):
+    def _publish(event: dict[str, Any]) -> None:
+        _publish_event(topic, event)
+
+    return _publish
+
+
+def _publish_event(topic: str, event: dict[str, Any]) -> None:
+    event["topic"] = topic
+    _events[topic].append(event)
+    for loop, q in list(_subscribers[topic]):
+        try:
+            loop.call_soon_threadsafe(_queue_event, q, event)
+        except RuntimeError:
+            _subscribers[topic].discard((loop, q))
 
 
 def _docker_images() -> list[dict[str, str]]:

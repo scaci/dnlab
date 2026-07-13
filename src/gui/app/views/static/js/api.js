@@ -41,7 +41,15 @@ const API = (() => {
     }
     if (res.status === 204) return null;
     const ct = res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) return res.json();
+    if (ct.includes('application/json')) {
+      const data = await res.json();
+      if (data && data._runtime_apply) {
+        window.dispatchEvent(new CustomEvent('dnlab:runtime-apply', {
+          detail: data._runtime_apply,
+        }));
+      }
+      return data;
+    }
     return res.text();
   }
 
@@ -103,6 +111,8 @@ const API = (() => {
     // Lifecycle
     status:     (id)         => request('GET',  `/api/labs/${id}/status`),
     statusLive: (id)         => request('GET',  `/api/labs/${id}/status-live`),
+    watchEvents:(id)         => request('POST', `/api/labs/${id}/events/watch`),
+    stopEvents: (id)         => request('POST', `/api/labs/${id}/events/stop`),
     plan:       (id)         => request('GET',  `/api/labs/${id}/plan`),
     deploy:     (id)         => request('POST', `/api/labs/${id}/deploy`),
     destroy:    (id)         => request('POST', `/api/labs/${id}/destroy`),
@@ -129,6 +139,7 @@ const API = (() => {
     listNodes: (id)                 => request('GET',   `/api/labs/${id}/nodes`),
     startNode: (id, node)           => request('POST',  `/api/labs/${id}/nodes/${encodeURIComponent(node)}/start`),
     stopNode:  (id, node)           => request('POST',  `/api/labs/${id}/nodes/${encodeURIComponent(node)}/stop`),
+    restartNode: (id, node)         => request('POST',  `/api/labs/${id}/nodes/${encodeURIComponent(node)}/restart`),
     reconcileNode: (id, node)       => request('POST',  `/api/labs/${id}/nodes/${encodeURIComponent(node)}/reconcile`),
     reconcileRealNet: (id, node)    => request('POST',  `/api/labs/${id}/realnet/${encodeURIComponent(node)}/reconcile`),
     setMgmtConfig: (id, mgmt) =>

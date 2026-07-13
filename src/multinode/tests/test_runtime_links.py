@@ -7,12 +7,24 @@ from dnlab_multinode.services import runtime_links
 
 
 class FakeClient:
-    def __init__(self):
+    def __init__(self, missing_ifaces=None):
         self.commands = []
+        self.missing_ifaces = set(missing_ifaces or [])
 
     def run(self, cmd, check=True):
         self.commands.append((cmd, check))
+        if "containerlab tools veth create" in cmd:
+            for iface in list(self.missing_ifaces):
+                if f"host:{iface}" in cmd:
+                    self.missing_ifaces.remove(iface)
         return ""
+
+    def run_no_check(self, cmd, **kwargs):
+        self.commands.append((cmd, False))
+        for iface in self.missing_ifaces:
+            if f"ip link show {iface}" in cmd:
+                return 1, "", "Device not found"
+        return 0, "", ""
 
 
 def test_build_runtime_links_same_cross_and_realnet(topo_factory):
@@ -118,6 +130,8 @@ def test_cross_host_link_uses_containerlab_vxlan_create_and_delete():
     )
     assert any("ip link delete vx-R1-e1-vx" in cmd for cmd, _ in left.commands)
     assert any("ip link delete vx-R2-e1-vx" in cmd for cmd, _ in right.commands)
+    assert any("ip link delete R1-e1-vx" in cmd for cmd, _ in left.commands)
+    assert any("ip link delete R2-e1-vx" in cmd for cmd, _ in right.commands)
 
 
 def test_cross_host_link_keeps_full_containerlab_vxlan_altname():
@@ -147,6 +161,81 @@ def test_cross_host_link_keeps_full_containerlab_vxlan_altname():
     assert right.commands[0][0].startswith("ip link show vx-vx9e3-host-e1 ")
     assert any("ip link delete vx-vx9e3-lab1-e2" in cmd for cmd, _ in left.commands)
     assert any("ip link delete vx-vx9e3-host-e1" in cmd for cmd, _ in right.commands)
+
+
+def test_cross_host_link_restores_missing_host_endpoint_before_vxlan():
+    left = FakeClient(missing_ifaces={"vx9c9-n9kv-e2"})
+    right = FakeClient()
+    link = RuntimeLinkState(
+        id="vx0",
+        link_type="cross_host",
+        endpoint_a={"node": "n9kv1", "iface": "eth2"},
+        endpoint_b={"node": "cumulu1", "iface": "eth2"},
+        host_a="worker1",
+        host_b="worker2",
+        host_endpoint_a="vx9c9-n9kv-e2",
+        host_endpoint_b="vx9c9-cumu-e2",
+        vxlan_id=3709,
+    )
+
+    runtime_links.create_link(
+        link,
+        {"worker1": left, "worker2": right},
+        underlay_ips={"worker1": "10.255.255.150", "worker2": "10.255.255.126"},
+        running_nodes={"n9kv1", "cumulu1"},
+        container_names={
+            "n9kv1": "clab-2b232253222b-n9kv1",
+            "cumulu1": "clab-2b232253222b-cumulu1",
+        },
+    )
+
+    commands = [cmd for cmd, _ in left.commands]
+    repair_idx = next(i for i, cmd in enumerate(commands) if "tools veth create" in cmd)
+    vxlan_idx = next(i for i, cmd in enumerate(commands) if "tools vxlan create" in cmd)
+    assert commands[repair_idx] == (
+        "containerlab tools veth create "
+        "--a-endpoint clab-2b232253222b-n9kv1:eth2 "
+        "--b-endpoint host:vx9c9-n9kv-e2"
+    )
+    assert repair_idx < vxlan_idx
+    assert link.state == "up"
+
+
+def test_realnet_link_restores_missing_host_endpoint_before_bridge_attach():
+    client = FakeClient(missing_ifaces={"rn-R1-e1"})
+    link = RuntimeLinkState(
+        id="rn0",
+        link_type="real_net",
+        endpoint_a={"node": "R1", "iface": "eth1"},
+        endpoint_b={"real_net": "access"},
+        host_a="worker1",
+        host_b="worker1",
+        host_endpoint_a="rn-R1-e1",
+        host_endpoint_b="br-realnet1",
+    )
+
+    runtime_links.create_link(
+        link,
+        {"worker1": client},
+        running_nodes={"R1"},
+        container_names={"R1": "clab-demo-R1"},
+    )
+
+    commands = [cmd for cmd, _ in client.commands]
+    repair_idx = next(i for i, cmd in enumerate(commands) if "tools veth create" in cmd)
+    attach_idx = next(i for i, cmd in enumerate(commands) if "master br-realnet1" in cmd)
+    assert commands[repair_idx] == (
+        "containerlab tools veth create "
+        "--a-endpoint clab-demo-R1:eth1 "
+        "--b-endpoint host:rn-R1-e1"
+    )
+    assert repair_idx < attach_idx
+    assert link.state == "up"
+
+    runtime_links.delete_link(link, {"worker1": client})
+    assert any(
+        "ip link delete rn-R1-e1" in cmd for cmd, _ in client.commands
+    )
 
 
 def test_create_link_marks_partial_if_peer_stopped():

@@ -130,6 +130,13 @@ def micro_vd_container_name(lab_name: str, vd_name: str) -> str:
     return f"clab-{micro_topology_name(lab_name, vd_name)}-{vd_name}"
 
 
+def host_topology_file(lab_name: str, host_name: str) -> str:
+    """Remote path for the consolidated topology owned by one host."""
+    lab = sanitize_lab_name(lab_name)
+    host = sanitize_lab_name(host_name)
+    return f"/tmp/dnlab-{lab}-{host}.clab.yml"
+
+
 def mgmt_anchor_topology_name(lab_name: str, host_name: str) -> str:
     """Containerlab project name for the per-host management anchor."""
     return f"dnlab-{lab_name}-mgmt-{host_name}"

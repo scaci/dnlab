@@ -253,6 +253,45 @@ def test_parse_topology_reads_node_ids_sidecar(tmp_path: Path):
     assert topo.nodes["R1"].persist_id == "11111111-1111-4111-8111-111111111111"
 
 
+def test_parse_topology_keeps_dnlab_frr_linux_kind(tmp_path: Path):
+    from dnlab_multinode.services.hosts_config import (
+        HostsConfig, ImageSyncConfig, InfraHost, MgmtDefaults,
+    )
+
+    topo_file = tmp_path / "lab.yml"
+    topo_file.write_text(
+        "name: lab\n"
+        "topology:\n"
+        "  nodes:\n"
+        "    R1:\n"
+        "      kind: linux\n"
+        "      image: registry.example/vrnetlab/dnlab_frr:10.6.1-dnlab\n"
+        "      env:\n"
+        "        CLAB_MGMT_PASSTHROUGH: 'true'\n"
+        "# dnlab-gui-node-ids: "
+        "{\"R1\":\"11111111-1111-4111-8111-111111111111\"}\n"
+        "# dnlab-gui-node-features: "
+        "{\"R1\":{\"frr_daemons\":{\"state\":{\"bgpd\":true},"
+        "\"materialize\":{\"type\":\"persist-key-value-bool-file\","
+        "\"path\":\"frr/daemons\"}}}}\n"
+    )
+    hosts = HostsConfig(
+        master=InfraHost(name="master", host="127.0.0.1", ssh_user="root", ssh_key=""),
+        workers={},
+        underlay_iface="eth0",
+        mgmt_defaults=MgmtDefaults(),
+        image_sync=ImageSyncConfig(),
+    )
+
+    topo = parse_topology(topo_file, hosts_config=hosts)
+
+    node = topo.nodes["R1"]
+    assert node.kind == "linux"
+    assert node.persist_id == "11111111-1111-4111-8111-111111111111"
+    assert node.env["CLAB_MGMT_PASSTHROUGH"] == "true"
+    assert topo.node_features["R1"]["frr_daemons"]["state"]["bgpd"] is True
+
+
 def test_parse_topology_ignores_unsafe_node_persist_id(tmp_path: Path):
     from dnlab_multinode.services.hosts_config import (
         HostsConfig, ImageSyncConfig, InfraHost, MgmtDefaults,

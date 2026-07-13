@@ -19,6 +19,7 @@ from dnlab_multinode.services import (
     webui_ports as webui_ports_svc, realnet as realnet_svc,
     persistence as persistence_svc, runtime_links as runtime_links_svc,
     runtime_relay as runtime_relay_svc,
+    clab_apply_plan, clab_capabilities, clab_kind_policy, qemu_guest,
 )
 from dnlab_multinode.services.hostsfile import HostEntry
 from dnlab_multinode.services.progress import (
@@ -55,6 +56,10 @@ class DeployController:
         # Underlay IPs resolved at deploy-time by querying each host directly
         # (not whatever the user wrote in `host:`, which may be a hostname).
         self._underlay_ips: dict[str, str] = {}
+        self._partial_per_host_apply = False
+        self._per_host_apply_mutated = False
+        self._clab_capabilities = {}
+        self._previous_state: DeploymentState | None = None
 
     def run(self) -> DeploymentState:
         """Execute the full deploy pipeline."""
@@ -66,6 +71,8 @@ class DeployController:
         )
         plan = planner.run()
         topo = planner.topo
+        state_dir = Path(self.topology_file).parent
+        self._previous_state = state_svc.load_state(topo.name, state_dir)
         self._progress.emit(
             "plan", "ok",
             detail=f"{len(topo.nodes)} VDs on {len(topo.all_hosts)} hosts, "
@@ -89,6 +96,8 @@ class DeployController:
             for client in self._clients.values():
                 client.connect()
 
+            self._select_runtime_mode()
+            self._guard_runtime_mode_transition()
             self._phase("underlay", "Resolving underlay IPs",
                         self._resolve_underlay_ips, topo)
             self._phase("mgmt-setup", "Setting up mgmt infrastructure",
@@ -99,8 +108,9 @@ class DeployController:
                         self._deploy_realnets, topo, plan)
             self._phase("persistence", "Preparing persistent overlays",
                         self._prepare_persistence, topo, plan)
-            self._phase("mgmt-anchor", "Deploying management anchors",
-                        self._deploy_mgmt_anchors, topo, plan)
+            if self._state.runtime_mode == clab_capabilities.PER_VD:
+                self._phase("mgmt-anchor", "Deploying management anchors",
+                            self._deploy_mgmt_anchors, topo, plan)
             self._phase("dnlab-deploy", "Deploying containerlab on each host",
                         self._deploy_clab, topo, plan)
             self._phase("health-check", "Checking VD container health",
@@ -132,13 +142,27 @@ class DeployController:
             return self._state
 
         except Exception as exc:
-            log.error("Deploy failed: %s — initiating rollback", exc)
-            self._progress.emit("rollback", "start", detail=str(exc))
-            try:
-                self._rollback(topo)
-                self._progress.emit("rollback", "ok", detail="Rollback complete")
-            except Exception as rb_exc:
-                self._progress.emit("rollback", "error", detail=str(rb_exc))
+            if self._partial_per_host_apply or self._per_host_apply_mutated:
+                log.error(
+                    "Per-host apply partially failed: %s — preserving runtime for retry",
+                    exc,
+                )
+                self._state.reconcile_required = True
+                state_svc.save_state(
+                    self._state, Path(self.topology_file).parent,
+                )
+                self._progress.emit(
+                    "rollback", "ok",
+                    detail="Partial apply preserved; reconciliation required",
+                )
+            else:
+                log.error("Deploy failed: %s — initiating rollback", exc)
+                self._progress.emit("rollback", "start", detail=str(exc))
+                try:
+                    self._rollback(topo)
+                    self._progress.emit("rollback", "ok", detail="Rollback complete")
+                except Exception as rb_exc:
+                    self._progress.emit("rollback", "error", detail=str(rb_exc))
             raise DeployError(f"Deploy fallito: {exc}") from exc
         finally:
             for client in self._clients.values():
@@ -316,6 +340,43 @@ class DeployController:
         )
         self._state.phases_completed.append("persistence")
 
+    def _select_runtime_mode(self) -> None:
+        requested = clab_capabilities.requested_runtime_mode()
+        if requested == clab_capabilities.PER_VD:
+            self._state.runtime_mode = requested
+            return
+
+        unavailable = []
+        for host_name, client in self._clients.items():
+            capabilities = clab_capabilities.probe(client)
+            self._clab_capabilities[host_name] = capabilities
+            self._state.containerlab_versions[host_name] = capabilities.version
+            if not capabilities.per_host_apply:
+                unavailable.append(f"{host_name} ({capabilities.version})")
+
+        if unavailable:
+            raise DeployError(
+                "Per-host apply runtime requested but unavailable on "
+                f"{', '.join(unavailable)}. Refusing fallback to per-vd."
+            )
+
+        self._state.runtime_mode = clab_capabilities.PER_HOST_APPLY
+        log.info("Using per-host Containerlab apply runtime on all hosts")
+
+    def _guard_runtime_mode_transition(self) -> None:
+        previous = self._previous_state
+        if previous is None or not previous.dnlab_deployed:
+            return
+        previous_mode = previous.runtime_mode or clab_capabilities.PER_VD
+        selected_mode = self._state.runtime_mode or clab_capabilities.PER_VD
+        if previous_mode == selected_mode:
+            return
+        raise DeployError(
+            f"Lab '{previous.lab_name}' is already deployed with runtime mode "
+            f"'{previous_mode}'. Refusing implicit switch to '{selected_mode}'. "
+            "Destroy the lab first or use an explicit offline migration."
+        )
+
     def _deploy_clab(self, topo, plan):
         log.info("Phase 3-4: Generating and deploying containerlab")
 
@@ -336,9 +397,14 @@ class DeployController:
             ]
             for node, allocs in (self._state.webui_allocations or {}).items()
         }
-        topo_files = generator.generate_micro_topology_files(
-            topo, plan, webui_allocations=webui_alloc_dicts,
-        )
+        if self._state.runtime_mode == clab_capabilities.PER_HOST_APPLY:
+            topo_files = generator.generate_topology_files(
+                topo, plan, webui_allocations=webui_alloc_dicts,
+            )
+        else:
+            topo_files = generator.generate_micro_topology_files(
+                topo, plan, webui_allocations=webui_alloc_dicts,
+            )
 
         # Pre-create the persist dirs for every VD that declares a
         # /persist bind. Without this, containerlab refuses to bind-mount
@@ -382,6 +448,10 @@ class DeployController:
                 client.upload_text(content, remote_path)
             log.info("[%s] Uploaded %d runtime asset file(s)", host_name, len(assets))
 
+        if self._state.runtime_mode == clab_capabilities.PER_HOST_APPLY:
+            self._apply_clab_per_host(topo, plan, topo_files)
+            return
+
         # Upload and deploy every VD micro-topology. Deploys are
         # sequential per Docker daemon because all micro-topologies on a
         # host share the same management network; concurrent clab deploys
@@ -413,6 +483,7 @@ class DeployController:
                     topology_file=remote_path,
                     kind=vd.kind,
                     image=vd.image,
+                    apply_mode=clab_kind_policy.expected_apply_mode(vd.kind),
                     mgmt_ipv4=vd.mgmt_ipv4,
                 ))
             return host_name, deployed
@@ -450,6 +521,169 @@ class DeployController:
             )
 
         self._state.phases_completed.append("dnlab")
+
+    def _apply_clab_per_host(self, topo, plan, topo_files: dict[str, str]) -> None:
+        """Validate, preview and apply one consolidated topology per host."""
+        previous_runtime = dict(self._state.node_runtime or {})
+        plan_entries_by_host: dict[str, list[clab_apply_plan.ApplyPlanEntry]] = {}
+        candidates: dict[str, str] = {}
+        for host_name, yaml_content in topo_files.items():
+            remote_path = naming.host_topology_file(topo.name, host_name)
+            self._clients[host_name].upload_text(yaml_content, remote_path)
+            candidates[host_name] = remote_path
+
+        # The global preflight barrier is intentional: no host is mutated
+        # unless every candidate validates and every dry-run succeeds.
+        for host_name, remote_path in candidates.items():
+            capabilities = self._clab_capabilities.get(host_name)
+            if capabilities is not None and not capabilities.validate:
+                log.info(
+                    "[%s] standalone validate unavailable; apply dry-run "
+                    "is the semantic preflight",
+                    host_name,
+                )
+                continue
+            try:
+                self._clients[host_name].validate_clab(remote_path)
+            except Exception as exc:
+                raise DeployError(
+                    f"[{host_name}] containerlab validate failed ({remote_path}): {exc}"
+                ) from exc
+        for host_name, remote_path in candidates.items():
+            try:
+                dry_run_output = self._clients[host_name].apply_clab(
+                    remote_path, dry_run=True,
+                )
+            except Exception as exc:
+                raise DeployError(
+                    f"[{host_name}] containerlab apply dry-run failed ({remote_path}): {exc}"
+                ) from exc
+            assignment = plan.assignments.get(host_name)
+            node_modes = {
+                vd_name: clab_kind_policy.expected_apply_mode(topo.nodes[vd_name].kind)
+                for vd_name in (assignment.vd_names if assignment else [])
+            }
+            plan_entries = clab_apply_plan.parse_apply_plan(dry_run_output)
+            plan_entries_by_host[host_name] = plan_entries
+            self._state.host_apply_plan[host_name] = clab_apply_plan.entries_to_dicts(
+                plan_entries,
+            )
+            violations = clab_apply_plan.policy_violations(
+                plan_entries,
+                node_modes,
+            )
+            if violations:
+                detail = "; ".join(
+                    f"{v.node}: action '{v.action}' is not allowed for "
+                    f"apply_mode={v.apply_mode} ({v.details})"
+                    for v in violations
+                )
+                raise DeployError(
+                    f"[{host_name}] containerlab apply dry-run is outside dNLab "
+                    f"kind policy ({remote_path}): {detail}"
+                )
+
+        for host_name, assignment in plan.assignments.items():
+            if not assignment.vd_names:
+                continue
+            remote_path = candidates[host_name]
+            self._state.host_apply_status[host_name] = "pending"
+            self._state.scheduling[host_name] = HostScheduleState(
+                host=self._underlay_ips[host_name],
+                topology_file=remote_path,
+                vd=list(assignment.vd_names),
+                resources_used={
+                    "cpu": assignment.cpu_used,
+                    "ram_mb": assignment.ram_mb_used,
+                },
+            )
+            for vd_name in assignment.vd_names:
+                vd = topo.nodes[vd_name]
+                self._state.node_runtime[vd_name] = NodeRuntimeState(
+                    node=vd_name,
+                    state="starting",
+                    host=host_name,
+                    container=naming.vd_container_name(topo.name, vd_name),
+                    topology_file=remote_path,
+                    kind=vd.kind,
+                    image=vd.image,
+                    apply_mode=clab_kind_policy.expected_apply_mode(vd.kind),
+                    mgmt_ipv4=vd.mgmt_ipv4,
+                )
+
+        self._powerdown_apply_affected_guests(previous_runtime, plan_entries_by_host)
+
+        def _apply(host_name: str, remote_path: str):
+            self._clients[host_name].apply_clab(remote_path)
+            return host_name
+
+        errors: list[str] = []
+        applied = 0
+        with ThreadPoolExecutor(max_workers=max(1, len(candidates))) as pool:
+            futures = {
+                pool.submit(_apply, host_name, path): host_name
+                for host_name, path in candidates.items()
+            }
+            for future in as_completed(futures):
+                host_name = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    self._state.host_apply_status[host_name] = "error"
+                    for runtime in self._state.node_runtime.values():
+                        if runtime.host == host_name:
+                            runtime.state = "error"
+                            runtime.last_error = str(exc)
+                    errors.append(
+                        f"[{host_name}] containerlab apply failed "
+                        f"({candidates[host_name]}): {exc}"
+                    )
+                else:
+                    applied += 1
+                    self._per_host_apply_mutated = True
+                    self._state.host_apply_status[host_name] = "applied"
+                state_svc.save_state(
+                    self._state, Path(self.topology_file).parent,
+                )
+
+        if errors:
+            self._partial_per_host_apply = applied > 0
+            self._state.reconcile_required = True
+            raise DeployError("; ".join(errors))
+
+        self._state.reconcile_required = False
+        self._state.phases_completed.append("dnlab")
+
+    def _powerdown_apply_affected_guests(
+        self,
+        previous_runtime: dict[str, NodeRuntimeState],
+        plan_entries_by_host: dict[str, list[clab_apply_plan.ApplyPlanEntry]],
+    ) -> None:
+        destructive_actions = {"recreated nodes", "restarted nodes", "deleted nodes"}
+        affected: set[str] = set()
+        for entries in plan_entries_by_host.values():
+            for entry in entries:
+                if entry.action in destructive_actions:
+                    affected.update(entry.nodes)
+
+        for node_name in sorted(affected):
+            runtime = previous_runtime.get(node_name) or self._state.node_runtime.get(node_name)
+            if runtime is None or not runtime.host or not runtime.container:
+                continue
+            if not qemu_guest.image_uses_persistent_disk(runtime.image):
+                continue
+            client = self._clients.get(runtime.host)
+            if client is None:
+                raise DeployError(
+                    f"[{runtime.host}] cannot safely power down {node_name}: host not connected"
+                )
+            try:
+                qemu_guest.graceful_powerdown_container(client, runtime.container)
+            except Exception as exc:
+                raise DeployError(
+                    f"[{runtime.host}] cannot safely power down {node_name} "
+                    f"({runtime.container}) before containerlab apply: {exc}"
+                ) from exc
 
     def _deploy_mgmt_anchors(self, topo, plan):
         log.info("Phase 3a: Deploying management anchor topologies")
@@ -507,13 +741,19 @@ class DeployController:
         """Poll container status on each host; fail fast on Exited/dead."""
         log.info("Phase 3b: Health-checking VD containers")
 
-        # Build {host_name: [container_name, ...]} from plan
+        # Build {host_name: [container_name, ...]} from runtime state. The
+        # naming differs between per-VD and consolidated per-host topologies.
         host_containers: dict[str, list[tuple[str, str]]] = {}
         for host_name, assignment in plan.assignments.items():
             if not assignment.vd_names:
                 continue
             containers = [
-                (vd, micro_vd_container_name(topo.name, vd))
+                (
+                    vd,
+                    self._state.node_runtime[vd].container
+                    if vd in self._state.node_runtime
+                    else micro_vd_container_name(topo.name, vd),
+                )
                 for vd in assignment.vd_names
             ]
             host_containers[host_name] = containers
@@ -635,17 +875,44 @@ class DeployController:
         links = runtime_links_svc.build_runtime_links(topo, plan)
         if not links:
             log.info("Phase 5: No runtime dataplane links")
+            self._delete_stale_per_host_runtime_links([])
+            self._state.runtime_links = []
+            self._state.vxlan_dataplane = []
+            self._state.reconcile_required = False
             return
 
         log.info("Phase 5: Reconciling %d runtime dataplane links", len(links))
+        self._refresh_runtime_node_states()
         running_nodes = {
             name
             for name, runtime in self._state.node_runtime.items()
             if runtime.state == "running"
         }
-        self._state.runtime_links = runtime_links_svc.reconcile_all_links(
-            links, self._clients, self._underlay_ips, running_nodes,
-        )
+        container_names = {
+            name: runtime.container
+            for name, runtime in self._state.node_runtime.items()
+            if runtime.container
+        }
+        if self._state.runtime_mode == clab_capabilities.PER_HOST_APPLY:
+            self._delete_stale_per_host_runtime_links(links)
+            runtime_links = []
+            for link in links:
+                if link.link_type in {"cross_host", "real_net"}:
+                    runtime_links.append(runtime_links_svc.create_link(
+                        link, self._clients, self._underlay_ips, running_nodes,
+                        container_names,
+                    ))
+                else:
+                    # Same-host links are native members of the consolidated
+                    # Containerlab topology.
+                    link.state = "up"
+                    runtime_links.append(link)
+            self._state.runtime_links = runtime_links
+        else:
+            self._state.runtime_links = runtime_links_svc.reconcile_all_links(
+                links, self._clients, self._underlay_ips, running_nodes,
+                container_names,
+            )
         self._state.vxlan_dataplane = [
             VxlanLinkState(
                 id=link.vxlan_id,
@@ -660,16 +927,92 @@ class DeployController:
             for link in self._state.runtime_links
             if link.link_type == "cross_host"
         ]
+        self._state.reconcile_required = any(
+            link.state != "up" for link in self._state.runtime_links
+        )
 
         self._state.phases_completed.append("runtime_links")
+
+    def _refresh_runtime_node_states(self) -> None:
+        """Refresh container states before runtime link reconciliation."""
+        by_host: dict[str, list[NodeRuntimeState]] = {}
+        for runtime in self._state.node_runtime.values():
+            if runtime.host and runtime.container:
+                by_host.setdefault(runtime.host, []).append(runtime)
+
+        now = datetime.now().isoformat(timespec="seconds")
+        for host_name, runtimes in by_host.items():
+            client = self._clients.get(host_name)
+            if client is None:
+                continue
+            statuses = self._query_container_statuses(
+                client, [runtime.container for runtime in runtimes],
+            )
+            for runtime in runtimes:
+                status = statuses.get(runtime.container, "missing")
+                if status == "running":
+                    runtime.state = "running"
+                    runtime.started_at = runtime.started_at or now
+                    runtime.last_error = ""
+                elif status in {"exited", "dead", "missing"}:
+                    runtime.state = status
+                    runtime.last_error = (
+                        "" if status == "exited"
+                        else f"container {runtime.container} is {status}"
+                    )
+
+    def _delete_stale_per_host_runtime_links(
+        self, desired_links: list,
+    ) -> None:
+        """Delete old dNLab-owned links absent from desired topology."""
+        if self._state.runtime_mode != clab_capabilities.PER_HOST_APPLY:
+            return
+
+        desired = {
+            self._runtime_link_signature(link)
+            for link in desired_links
+            if link.link_type in {"cross_host", "real_net"}
+        }
+        for link in list(self._state.runtime_links or []):
+            if link.link_type not in {"cross_host", "real_net"}:
+                continue
+            if self._runtime_link_signature(link) in desired:
+                continue
+            runtime_links_svc.delete_link(link, self._clients)
+
+    @staticmethod
+    def _runtime_link_signature(link) -> tuple:
+        endpoints = sorted(
+            (
+                str(endpoint.get("node") or ""),
+                str(endpoint.get("iface") or ""),
+            )
+            for endpoint in [link.endpoint_a, link.endpoint_b]
+            if endpoint.get("node")
+        )
+        return (
+            link.link_type,
+            tuple(endpoints),
+            str(link.host_a or ""),
+            str(link.host_b or ""),
+            str(link.host_endpoint_a or ""),
+            str(link.host_endpoint_b or ""),
+            int(link.vxlan_id or 0),
+        )
 
     # ── Phase 5b: Runtime relay sidecars ────────────────────────────
 
     def _deploy_runtime_relays(self, topo, plan):
         log.info("Phase 5b: Deploying runtime relay sidecars")
         api_key = runtime_relay_svc.generate_api_key()
+        runtime_containers = {
+            vd_name: runtime.container
+            for vd_name, runtime in self._state.node_runtime.items()
+            if runtime.container
+        }
         results = runtime_relay_svc.deploy_runtime_relays(
             topo, plan, self._clients, self._underlay_ips, api_key,
+            runtime_containers=runtime_containers,
         )
         for host_name, info in results.items():
             self._state.runtime_relays[host_name] = RuntimeRelayState(
@@ -850,12 +1193,16 @@ class DeployController:
                         topo.name, self._clients, self._state.realnets,
                     )
                 elif phase == "dnlab":
-                    for runtime in self._state.node_runtime.values():
-                        if runtime.host in self._clients and runtime.topology_file:
-                            self._clients[runtime.host].run(
-                                f"containerlab destroy -t {runtime.topology_file} --cleanup",
-                                check=False,
-                            )
+                    targets = {
+                        (runtime.host, runtime.topology_file)
+                        for runtime in self._state.node_runtime.values()
+                        if runtime.host in self._clients and runtime.topology_file
+                    }
+                    for host, topology_file in targets:
+                        command = f"containerlab destroy -t {topology_file} --cleanup"
+                        if self._state.runtime_mode == clab_capabilities.PER_HOST_APPLY:
+                            command += " --keep-mgmt-net"
+                        self._clients[host].run(command, check=False)
                 elif phase == "mgmt_anchor":
                     for anchor in self._state.mgmt_anchors.values():
                         if anchor.host in self._clients and anchor.topology_file:

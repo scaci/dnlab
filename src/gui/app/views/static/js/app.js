@@ -102,6 +102,16 @@
     }
   });
 
+  window.addEventListener('dnlab:runtime-apply', async (event) => {
+    const result = event.detail || {};
+    if (result.reconciled) {
+      await _refreshLabStatus();
+    } else if (result.error) {
+      showToast(`Live topology apply failed: ${result.error}`, 'error');
+      await _refreshLabStatus();
+    }
+  });
+
   Sidebar.load();
   await _refreshLabStatus();
 
@@ -288,6 +298,10 @@
     _startRuntimeNode(nodeData.id);
   });
 
+  ContextMenu.on('restart-vd', (nodeData) => {
+    _restartRuntimeNode(nodeData.id);
+  });
+
   ContextMenu.on('rename', (nodeData) => {
     showModal('Rename Node', `
       <label>New name for <strong>${nodeData.id}</strong><br>
@@ -472,6 +486,7 @@
       const res = await API.Labs.deploy(currentLabId);
       if (res.success) {
         showToast('Lab started!', 'success');
+        _watchContainerlabEvents();
       } else {
         Toolbar.setLabStatus('error', res.output || 'deploy failed');
         showToast('Deploy failed: ' + (res.output || ''), 'error');
@@ -723,12 +738,30 @@
     if (!currentLabId) { showToast('Lab not deployed', 'warn'); return; }
     try {
       showToast(`Starting ${nodeName}…`, 'info');
-      await API.Labs.startNode(currentLabId, nodeName);
+      const result = await API.Labs.startNode(currentLabId, nodeName);
+      if (!result || result.success === false) {
+        throw new Error(result?.output || `Unable to start ${nodeName}`);
+      }
       await _refreshLabStatus();
       if (refreshProperties) _refreshOpenNodeProperties(nodeName);
       showToast(`${nodeName} running`, 'success');
     } catch (e) {
       showToast(`Start failed: ${e.message}`, 'error');
+      await _refreshLabStatus();
+      if (refreshProperties) _refreshOpenNodeProperties(nodeName);
+    }
+  }
+
+  async function _restartRuntimeNode(nodeName, refreshProperties = false) {
+    if (!currentLabId) { showToast('Lab not deployed', 'warn'); return; }
+    try {
+      showToast(`Restarting ${nodeName}…`, 'info');
+      await API.Labs.restartNode(currentLabId, nodeName);
+      await _refreshLabStatus();
+      if (refreshProperties) _refreshOpenNodeProperties(nodeName);
+      showToast(`${nodeName} restarted`, 'success');
+    } catch (e) {
+      showToast(`Restart failed: ${e.message}`, 'error');
       await _refreshLabStatus();
       if (refreshProperties) _refreshOpenNodeProperties(nodeName);
     }
@@ -998,6 +1031,7 @@
     Toolbar.setLabStatus('destroying', 'starting destroy...');
     showToast('Destruction in progress…', 'info');
     try {
+      await _stopContainerlabEvents(currentLabId);
       const res = await API.Labs.destroy(currentLabId);
       if (res.success) {
         showToast('Lab destroyed', 'success');
@@ -1073,6 +1107,7 @@
       }
       MgmtPanel.setTopology(currentLabName, mgmtCfg);
       EventsPanel.setLab(currentLabId);
+      _watchContainerlabEvents();
       await _refreshLabStatus();
       showToast(`Aperto: ${currentLabName}`, 'success');
     } catch (e) {
@@ -1081,6 +1116,7 @@
   }
 
   function _clearCurrentLab() {
+    const previousLabId = currentLabId;
     currentLabId = null;
     currentLabName = null;
     currentLabCanWrite = false;
@@ -1104,6 +1140,7 @@
     Canvas.setFollowRabbitSessions([]);
     _stopCapturePolling();
     Properties.setRealNetRemoteAs('');
+    _stopContainerlabEvents(previousLabId);
   }
 
   function _startCapturePolling() {
@@ -1138,6 +1175,20 @@
     try {
       const res = await API.Labs.followRabbitSessions(currentLabId);
       Canvas.setFollowRabbitSessions(res.sessions || []);
+    } catch (_) {}
+  }
+
+  async function _watchContainerlabEvents() {
+    if (!currentLabId) return;
+    try {
+      await API.Labs.watchEvents(currentLabId);
+    } catch (_) {}
+  }
+
+  async function _stopContainerlabEvents(labId) {
+    if (!labId) return;
+    try {
+      await API.Labs.stopEvents(labId);
     } catch (_) {}
   }
 
@@ -1185,6 +1236,7 @@
             state: info?.state || '',
             container: info?.container || '',
             topology_file: info?.topology_file || '',
+            apply_mode: info?.apply_mode || '',
             last_error: info?.last_error || '',
           };
         }
@@ -1267,7 +1319,19 @@
     if (!lastLiveStatus && currentLabId) {
       await _refreshLabStatus();
     }
-    const data = _buildPropertiesNodeData(nodeData);
+    let effectiveNodeData = nodeData;
+    if (currentLabId && typeof NodeFeatureState !== 'undefined') {
+      try {
+        effectiveNodeData = await NodeFeatureState.resolve(API, currentLabId, nodeData);
+        const nodeId = effectiveNodeData.id || effectiveNodeData.name;
+        Canvas.updateNode(nodeId, {
+          node_features_state: effectiveNodeData.node_features_state || null,
+        });
+      } catch (error) {
+        console.warn('Unable to refresh authoritative node feature state', error);
+      }
+    }
+    const data = _buildPropertiesNodeData(effectiveNodeData);
     if (data.kind === '_real_net') {
       await _refreshRealNetConfig();
       try {

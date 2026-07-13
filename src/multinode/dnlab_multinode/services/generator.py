@@ -31,14 +31,25 @@ MGMT_ANCHOR_NODE = "mgmt-anchor"
 
 
 def _needs_persist_bind(image: str) -> bool:
-    """Return True for images explicitly patched by dnlab.
+    """Return True for images explicitly patched by dNLab.
 
-    The ``-dnlab`` suffix is the contract that the image knows how to use a
-    host-side bind mounted at ``/persist``. This works for both vrnetlab and
-    container-native images, regardless of registry prefix.
+    The primary contract is the ``-dnlab`` tag suffix: images carrying that
+    suffix know how to use a host-side bind mounted at ``/persist``.
+
+    Older/local dNLab FRR-style builds can also be published as
+    ``vrnetlab/dnlab_*`` without relying solely on the tag name. Keep that
+    repository-name form persistent too, otherwise a lab stop/start can
+    recreate containers without reattaching the VD disk state.
     """
-    tag = (image or "").rsplit(":", 1)[-1]
-    return tag.endswith("-dnlab")
+    image = str(image or "").strip()
+    if not image:
+        return False
+    tag = image.rsplit(":", 1)[-1]
+    if tag.endswith("-dnlab"):
+        return True
+    repo = image.rsplit(":", 1)[0] if ":" in image else image
+    basename = repo.rsplit("/", 1)[-1]
+    return basename.startswith("dnlab_")
 
 
 def node_asset_path(topo_name: str, node_name: str, filename: str) -> str:
@@ -226,22 +237,6 @@ def _build_clab_dict(
     # Links section
     links = []
 
-    # GUI real_net pseudo-nodes are materialized as pre-created Linux
-    # bridges on each host. Containerlab sees a regular bridge kind.
-    realnet_bridges: dict[str, str] = {}
-    for rn_link in topo.real_net_links:
-        if rn_link.host != host_name or rn_link.node not in vd_set:
-            continue
-        bridge = naming.realnet_bridge_name(topo.name, rn_link.real_net)
-        realnet_bridges[rn_link.real_net] = bridge
-        nodes.setdefault(bridge, {"kind": "bridge"})
-        links.append({
-            "endpoints": [
-                f"{rn_link.node}:{rn_link.iface}",
-                f"{bridge}:{rn_link.bridge_iface}",
-            ],
-        })
-
     # Local links: both endpoints on this host → normal veth
     for link in plan.local_links:
         if link.source in vd_set and link.target in vd_set:
@@ -252,22 +247,11 @@ def _build_clab_dict(
                 ],
             })
 
-    # Cross-host links: this host's side terminates on host:<iface>
-    for cl in plan.cross_host_links:
-        if cl.source_host == host_name:
-            links.append({
-                "endpoints": [
-                    f"{cl.source_node}:{cl.source_iface}",
-                    f"host:{cl.source_host_iface}",
-                ],
-            })
-        elif cl.target_host == host_name:
-            links.append({
-                "endpoints": [
-                    f"{cl.target_node}:{cl.target_iface}",
-                    f"host:{cl.target_host_iface}",
-                ],
-            })
+    # Cross-host and real_net links are intentionally absent here. Their
+    # external host/bridge endpoints already exist on subsequent apply runs,
+    # and Containerlab 0.77 rejects those otherwise-idempotent candidates at
+    # dry-run time. dNLab owns these links and reconciles their node-to-host
+    # veths plus VXLAN/bridge attachment after every apply.
 
     # Build final dict
     clab = {

@@ -127,6 +127,30 @@ def test_deploy_runtime_relay_command_is_lab_scoped_and_host_local():
     assert f"-e RELAY_ALLOWED_CONTAINERS='{expected_list}'" in run_cmd
 
 
+def test_deploy_runtime_relay_uses_runtime_container_names_when_provided():
+    topo = make_topology(name="demo")
+    plan = _plan_with_assignments("demo", {"master": ["R1", "R2"]})
+    client = _mock_host_client()
+
+    relay_svc.deploy_runtime_relays(
+        topo,
+        plan,
+        {"master": client},
+        {"master": "10.0.0.10"},
+        api_key="secret",
+        runtime_containers={
+            "R1": "clab-demo-R1",
+            "R2": "clab-demo-R2",
+        },
+    )
+
+    run_cmds = [c.args[0] for c in client.run.call_args_list]
+    run_cmd = next(cmd for cmd in run_cmds if "docker run -d" in cmd)
+
+    assert "-e RELAY_ALLOWED_CONTAINERS='clab-demo-R1 clab-demo-R2'" in run_cmd
+    assert micro_vd_container_name("demo", "R1") not in run_cmd
+
+
 def test_deploy_runtime_relay_missing_image_raises():
     topo = make_topology(name="demo")
     plan = _plan_with_assignments("demo", {"master": ["R1"]})

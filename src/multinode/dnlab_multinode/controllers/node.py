@@ -7,6 +7,7 @@ from pathlib import Path
 
 from dnlab_multinode.models.state import DeploymentState
 from dnlab_multinode.services import runtime_links as runtime_links_svc
+from dnlab_multinode.services.clab_capabilities import PER_HOST_APPLY
 from dnlab_multinode.services.config import parse_topology
 from dnlab_multinode.services.ssh import create_clients
 from dnlab_multinode.services.state import load_state, save_state
@@ -32,7 +33,8 @@ class NodeLifecycleController:
     def stop(self, node: str) -> DeploymentState:
         runtime = self._runtime(node)
         self._ensure_deployed()
-        self._ensure_per_vd_runtime(runtime)
+        if self.state.runtime_mode != PER_HOST_APPLY:
+            self._ensure_per_vd_runtime(runtime)
         if runtime.state == "stopped":
             return self.state
 
@@ -42,8 +44,16 @@ class NodeLifecycleController:
             runtime.state = "stopping"
             save_state(self.state, self.state_dir)
 
-            runtime_links_svc.delete_node_links(node, self.state.runtime_links, clients)
-            clients[runtime.host].destroy_clab(runtime.topology_file)
+            if self.state.runtime_mode == PER_HOST_APPLY:
+                self._delete_dnlab_owned_links(node, clients)
+                clients[runtime.host].lifecycle_clab(
+                    "stop", runtime.topology_file, node,
+                )
+            else:
+                runtime_links_svc.delete_node_links(
+                    node, self.state.runtime_links, clients,
+                )
+                clients[runtime.host].destroy_clab(runtime.topology_file)
 
             runtime.state = "stopped"
             runtime.last_error = ""
@@ -64,8 +74,9 @@ class NodeLifecycleController:
     def start(self, node: str) -> DeploymentState:
         runtime = self._runtime(node)
         self._ensure_deployed()
-        self._ensure_per_vd_runtime(runtime)
-        if runtime.state == "running":
+        if self.state.runtime_mode != PER_HOST_APPLY:
+            self._ensure_per_vd_runtime(runtime)
+        if runtime.state == "running" and self.state.runtime_mode != PER_HOST_APPLY:
             return self.state
 
         clients = create_clients(self.topo.all_hosts)
@@ -74,7 +85,12 @@ class NodeLifecycleController:
             runtime.state = "starting"
             save_state(self.state, self.state_dir)
 
-            clients[runtime.host].deploy_clab(runtime.topology_file)
+            if self.state.runtime_mode == PER_HOST_APPLY:
+                clients[runtime.host].lifecycle_clab(
+                    "start", runtime.topology_file, node,
+                )
+            else:
+                clients[runtime.host].deploy_clab(runtime.topology_file)
             self._wait_container_running(
                 clients[runtime.host], runtime.container, timeout=60,
             )
@@ -84,9 +100,43 @@ class NodeLifecycleController:
             runtime.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
             runtime.last_error = ""
             running = self._running_nodes()
-            runtime_links_svc.reconcile_node_links(
-                node, self.state.runtime_links, clients, self._underlay_ips(), running,
+            self._reconcile_node_links(node, clients, running)
+            save_state(self.state, self.state_dir)
+            return self.state
+        except Exception as exc:
+            runtime.state = "error"
+            runtime.last_error = str(exc)
+            save_state(self.state, self.state_dir)
+            raise
+        finally:
+            for client in clients.values():
+                client.close()
+
+    def restart(self, node: str) -> DeploymentState:
+        runtime = self._runtime(node)
+        self._ensure_deployed()
+        if self.state.runtime_mode != PER_HOST_APPLY:
+            self._ensure_per_vd_runtime(runtime)
+            self.stop(node)
+            return self.start(node)
+
+        clients = create_clients(self.topo.all_hosts)
+        try:
+            self._connect(clients)
+            runtime.state = "restarting"
+            save_state(self.state, self.state_dir)
+            self._delete_dnlab_owned_links(node, clients)
+            clients[runtime.host].lifecycle_clab(
+                "restart", runtime.topology_file, node,
             )
+            self._wait_container_running(
+                clients[runtime.host], runtime.container, timeout=60,
+            )
+            self._set_default_route(clients[runtime.host], runtime.container)
+            runtime.state = "running"
+            runtime.started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+            runtime.last_error = ""
+            self._reconcile_node_links(node, clients, self._running_nodes())
             save_state(self.state, self.state_dir)
             return self.state
         except Exception as exc:
@@ -100,19 +150,23 @@ class NodeLifecycleController:
 
     def reconcile(self, node: str | None = None) -> DeploymentState:
         self._ensure_deployed()
+        if node and self.state.runtime_mode != PER_HOST_APPLY:
+            self._ensure_per_vd_runtime(self._runtime(node))
         clients = create_clients(self.topo.all_hosts)
         try:
             self._connect(clients)
             running = self._running_nodes()
             if node:
-                self._ensure_per_vd_runtime(self._runtime(node))
-                runtime_links_svc.reconcile_node_links(
-                    node, self.state.runtime_links, clients, self._underlay_ips(), running,
-                )
+                self._runtime(node)
+                self._reconcile_node_links(node, clients, running)
             else:
-                runtime_links_svc.reconcile_all_links(
-                    self.state.runtime_links, clients, self._underlay_ips(), running,
-                )
+                if self.state.runtime_mode == PER_HOST_APPLY:
+                    for runtime_node in self.state.node_runtime:
+                        self._reconcile_node_links(runtime_node, clients, running)
+                else:
+                    runtime_links_svc.reconcile_all_links(
+                        self.state.runtime_links, clients, self._underlay_ips(), running,
+                    )
             save_state(self.state, self.state_dir)
             return self.state
         finally:
@@ -121,6 +175,11 @@ class NodeLifecycleController:
 
     def _runtime(self, node: str):
         if node not in self.state.node_runtime:
+            if node in self.topo.nodes:
+                raise NodeLifecycleError(
+                    f"Node '{node}' is not deployed in the runtime state; "
+                    "apply lab changes before using single-VD lifecycle actions"
+                )
             raise NodeLifecycleError(f"Unknown runtime VD '{node}'")
         return self.state.node_runtime[node]
 
@@ -135,6 +194,38 @@ class NodeLifecycleController:
                 "Single-VD start/stop requires a per-VD runtime deployment. "
                 f"Node '{runtime.node}' is part of a legacy per-host Containerlab topology."
             )
+
+    def _delete_dnlab_owned_links(self, node: str, clients) -> None:
+        for link in self.state.runtime_links:
+            if (
+                link.link_type in {"cross_host", "real_net"}
+                and node in self._link_nodes(link)
+            ):
+                runtime_links_svc.delete_link(link, clients)
+
+    def _reconcile_node_links(self, node: str, clients, running: set[str]) -> None:
+        if self.state.runtime_mode == PER_HOST_APPLY:
+            for link in self.state.runtime_links:
+                if (
+                    link.link_type in {"cross_host", "real_net"}
+                    and node in self._link_nodes(link)
+                ):
+                    runtime_links_svc.create_link(
+                        link, clients, self._underlay_ips(), running,
+                        self._container_names(),
+                    )
+            return
+        runtime_links_svc.reconcile_node_links(
+            node, self.state.runtime_links, clients, self._underlay_ips(), running,
+            self._container_names(),
+        )
+
+    def _container_names(self) -> dict[str, str]:
+        return {
+            node: runtime.container
+            for node, runtime in self.state.node_runtime.items()
+            if runtime.container
+        }
 
     @staticmethod
     def _connect(clients) -> None:

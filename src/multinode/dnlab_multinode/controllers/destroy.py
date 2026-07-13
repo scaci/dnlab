@@ -10,9 +10,10 @@ from dnlab_multinode.models.state import DeploymentState
 from dnlab_multinode.services import (
     jumphost, dns as dns_svc, netsetup, state as state_svc, vxlan,
     realnet as realnet_svc, runtime_links as runtime_links_svc,
-    runtime_relay as runtime_relay_svc,
+    runtime_relay as runtime_relay_svc, qemu_guest,
 )
 from dnlab_multinode.services.progress import ProgressCallback, make_timer
+from dnlab_multinode.services.clab_capabilities import PER_HOST_APPLY
 from dnlab_multinode.services.ssh import SSHClient
 
 log = logging.getLogger(__name__)
@@ -86,7 +87,8 @@ class DestroyController:
             self._phase("destroy-legacy-logging", "Removing legacy logging containers", self._destroy_legacy_logging)
             self._phase("destroy-runtime-links", "Removing runtime dataplane links", self._destroy_runtime_links)
             self._phase("destroy-dnlab", "Destroying containerlab", self._destroy_clab)
-            self._phase("destroy-mgmt-anchor", "Destroying management anchors", self._destroy_mgmt_anchors)
+            if self._state.runtime_mode != PER_HOST_APPLY:
+                self._phase("destroy-mgmt-anchor", "Destroying management anchors", self._destroy_mgmt_anchors)
             self._phase("destroy-realnet", "Removing real_net infrastructure", self._destroy_realnets)
             self._phase("destroy-vxlan", "Removing dataplane VxLAN", self._destroy_vxlan_dataplane)
             # docker network removal must precede mgmt teardown: the mgmt
@@ -197,11 +199,18 @@ class DestroyController:
 
         log.info("Teardown: destroying containerlab on all hosts")
 
+        self._powerdown_runtime_guests()
+
         def _destroy_topology(host_name, topology_file):
             if host_name not in self._clients:
                 return f"Host '{host_name}' not connected"
             try:
-                self._clients[host_name].destroy_clab(topology_file)
+                if self._state.runtime_mode == PER_HOST_APPLY:
+                    self._clients[host_name].destroy_clab(
+                        topology_file, keep_mgmt_net=True,
+                    )
+                else:
+                    self._clients[host_name].destroy_clab(topology_file)
                 log.info("[%s] containerlab destroy OK: %s", host_name, topology_file)
                 return None
             except Exception as e:
@@ -221,6 +230,7 @@ class DestroyController:
                 if hs.topology_file
             ]
 
+        targets = sorted(set(targets))
         with ThreadPoolExecutor(max_workers=max(1, len(targets))) as pool:
             futures = {
                 pool.submit(_destroy_topology, h, path): (h, path)
@@ -230,6 +240,49 @@ class DestroyController:
                 err = f.result()
                 if err:
                     self._errors.append(err)
+
+    def _powerdown_runtime_guests(self):
+        if not self._state.node_runtime:
+            return
+
+        candidates_by_host = {}
+        for runtime in self._state.node_runtime.values():
+            if (
+                runtime.host
+                and runtime.container
+                and qemu_guest.image_uses_persistent_disk(runtime.image)
+            ):
+                candidates_by_host.setdefault(runtime.host, []).append(runtime)
+
+        def _powerdown_host(host_name, runtimes):
+            client = self._clients.get(host_name)
+            if client is None:
+                return (
+                    f"Cannot power down guests: host '{host_name}' not connected"
+                )
+            errors = []
+            for runtime in runtimes:
+                try:
+                    qemu_guest.graceful_powerdown_container(client, runtime.container)
+                except Exception as e:
+                    errors.append(
+                        f"[{runtime.host}] cannot safely power down {runtime.node} "
+                        f"({runtime.container}): {e}"
+                    )
+            return "; ".join(errors) if errors else None
+
+        with ThreadPoolExecutor(max_workers=max(1, len(candidates_by_host))) as pool:
+            futures = {
+                pool.submit(_powerdown_host, host_name, runtimes): host_name
+                for host_name, runtimes in candidates_by_host.items()
+            }
+            errors = [
+                err
+                for future in as_completed(futures)
+                if (err := future.result())
+            ]
+        if errors:
+            raise DestroyError("; ".join(errors))
 
     def _destroy_mgmt_anchors(self):
         if not self._state.mgmt_anchors:

@@ -42,3 +42,12 @@ def test_remote_image_exposes_gui_catalog_kind(repository, expected_kind):
 def test_local_docker_service_resolves_gui_catalog_kind(repository, expected_kind):
     kind, _vendor = device_catalog.resolve_kind_and_vendor(repository)
     assert kind == expected_kind
+
+
+def test_custom_frr_uses_linux_deploy_kind():
+    assert device_catalog.deploy_kind("frr") == "linux"
+    assert device_catalog.resolve_image_kind("vrnetlab/dnlab_frr:10.6.1-dnlab") == "frr"
+
+
+def test_native_frrouting_image_remains_in_frr_catalog():
+    assert device_catalog.resolve_image_kind("quay.io/frrouting/frr:10.6.1") == "frr"

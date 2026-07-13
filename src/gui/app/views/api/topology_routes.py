@@ -33,6 +33,7 @@ from app.models.link import Link
 from app.models.topology import Topology
 from app.services.lab_resolver import resolve_for_read, resolve_for_write
 from app.services import realnet_bgp
+from app.services.multinode_service import multinode
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,30 @@ def _dump_topology_for_user(topo: Topology, lab, user: User) -> dict:
         dumped,
         can_view_password=_can_view_realnet_password(lab, user),
     )
+
+
+async def _reconcile_runtime_after_edit(lab) -> dict:
+    """Best-effort live apply metadata for a persisted topology edit."""
+    try:
+        return await multinode.reconcile_topology_if_deployed(lab)
+    except Exception as exc:
+        log.error(
+            "automatic runtime apply failed for %s: %s", lab.netname, exc,
+        )
+        return {
+            "attempted": True,
+            "reconciled": False,
+            "error": str(exc),
+        }
+
+
+async def _mutation_response(
+    topo: Topology, lab, user: User, *, apply: bool,
+) -> dict:
+    dumped = _dump_topology_for_user(topo, lab, user)
+    if apply:
+        dumped["_runtime_apply"] = await _reconcile_runtime_after_edit(lab)
+    return dumped
 
 
 class NewTopologyRequest(BaseModel):
@@ -351,7 +376,7 @@ async def add_link(
         topo = _ctrl.add_link_by_path(lab.yaml_path, lab.netname, link)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc))
-    return _dump_topology_for_user(topo, lab, user)
+    return await _mutation_response(topo, lab, user, apply=True)
 
 
 @router.delete("/{lab_id}/topology/links")
@@ -372,7 +397,7 @@ async def remove_link(
         )
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc))
-    return _dump_topology_for_user(topo, lab, user)
+    return await _mutation_response(topo, lab, user, apply=True)
 
 
 # ── draw.io import / export ───────────────────────────────────────

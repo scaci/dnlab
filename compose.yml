@@ -148,6 +148,7 @@ services:
       DNLAB_IMAGE_SYNC_API_URL: http://image-sync:8083
       DNLAB_VERSION: ${DNLAB_VERSION:?set DNLAB_VERSION in .env}
       DNLAB_RUNTIME_IMAGE_PREFIX: ${DNLAB_RUNTIME_IMAGE_PREFIX:?set DNLAB_RUNTIME_IMAGE_PREFIX in .env}
+      DNLAB_CONTAINERLAB_RUNTIME_MODE: ${DNLAB_CONTAINERLAB_RUNTIME_MODE:-per-vd}
     volumes:
       - ${DNLAB_CONFIG_DIR:-/etc/dnlab}:/etc/dnlab:ro
       - ${DNLAB_SSH_DIR:-/root/.ssh}:/root/.ssh:ro

@@ -13,6 +13,7 @@ from dnlab_multinode.services.generator import (
     _needs_persist_bind,
     render_node_feature_files,
 )
+from dnlab_multinode.services.mgmt_ips import ipv4_reservations
 
 
 def _plan_single_host(topo, host_name, vd_names, local_links=None):
@@ -46,6 +47,32 @@ def test_generate_produces_yaml(topo_factory):
     assert "R2" in parsed["topology"]["nodes"]
 
 
+def test_per_host_topology_does_not_embed_mgmt_anchor(topo_factory):
+    nodes = {
+        "R1": VDNode(name="R1", kind="linux", image="alpine"),
+        "R2": VDNode(name="R2", kind="linux", image="alpine"),
+    }
+    topo = topo_factory(nodes=nodes, links=[], num_workers=1)
+    plan = SchedulePlan(
+        lab_name=topo.name,
+        assignments={
+            "master": HostAssignment("master", "10.0.0.10", vd_names=["R1"]),
+            "worker1": HostAssignment("worker1", "10.0.0.11", vd_names=["R2"]),
+        },
+    )
+
+    files = generate_topology_files(topo, plan)
+    anchor_ip = ipv4_reservations(topo.mgmt.ipv4_subnet).anchor
+
+    assert set(files) == {"master", "worker1"}
+    for yaml_text in files.values():
+        parsed = yaml.safe_load(yaml_text)
+        nodes_out = parsed["topology"]["nodes"]
+        assert "mgmt-anchor" not in nodes_out
+        assert "dnlab-mgmt-anchor" not in yaml_text
+        assert anchor_ip not in yaml_text
+
+
 def test_local_link_preserved(topo_factory):
     nodes = {
         "R1": VDNode(name="R1", kind="linux", image="x"),
@@ -65,7 +92,7 @@ def test_local_link_preserved(topo_factory):
     assert "R2:eth1" in eps
 
 
-def test_crosshost_link_terminated_on_host(topo_factory):
+def test_crosshost_link_is_excluded_from_per_host_topology(topo_factory):
     nodes = {
         "R1": VDNode(name="R1", kind="linux", image="x"),
         "R2": VDNode(name="R2", kind="linux", image="x"),
@@ -94,13 +121,8 @@ def test_crosshost_link_terminated_on_host(topo_factory):
     master_yaml = yaml.safe_load(files["master"])
     worker_yaml = yaml.safe_load(files["worker1"])
 
-    master_ep = master_yaml["topology"]["links"][0]["endpoints"]
-    assert "R1:eth1" in master_ep
-    assert "host:R1-e1-vx" in master_ep
-
-    worker_ep = worker_yaml["topology"]["links"][0]["endpoints"]
-    assert "R2:eth1" in worker_ep
-    assert "host:R2-e1-vx" in worker_ep
+    assert "links" not in master_yaml["topology"]
+    assert "links" not in worker_yaml["topology"]
 
 
 def test_mgmt_section_injected(topo_factory):
@@ -117,7 +139,7 @@ def test_mgmt_section_injected(topo_factory):
     assert parsed["mgmt"]["ipv4-gw"] == (topo.mgmt.docker_ipv4_gw or topo.mgmt.ipv4_gw)
 
 
-def test_persist_bind_requires_dnlab_suffix(topo_factory):
+def test_persist_bind_requires_dnlab_patched_image(topo_factory):
     nodes = {
         "raw": VDNode(name="raw", kind="linux", image="vrnetlab/cisco_xrv9k:25.2.2"),
         "patched": VDNode(
@@ -136,6 +158,26 @@ def test_persist_bind_requires_dnlab_suffix(topo_factory):
 
     assert "binds" not in raw_node
     assert any(bind.endswith(":/persist") for bind in patched_node["binds"])
+
+
+def test_per_host_persist_bind_for_dnlab_vrnetlab_repo_without_suffix(topo_factory):
+    nodes = {
+        "frr2": VDNode(
+            name="frr2",
+            kind="linux",
+            image="vrnetlab/dnlab_frr:latest",
+            persist_id="stable-frr2",
+        ),
+    }
+    topo = topo_factory(nodes=nodes, links=[], num_workers=0)
+
+    plan = _plan_single_host(topo, "master", ["frr2"])
+    parsed = yaml.safe_load(generate_topology_files(topo, plan)["master"])
+
+    binds = parsed["topology"]["nodes"]["frr2"]["binds"]
+    assert (
+        "/var/lib/docker/dnlab-backups/lab/stable-frr2:/persist"
+    ) in binds
 
 
 def test_persist_bind_uses_stable_persist_id(topo_factory):
@@ -162,6 +204,8 @@ def test_persist_bind_uses_stable_persist_id(topo_factory):
 def test_needs_persist_bind_uses_image_tag_suffix():
     assert _needs_persist_bind("vrnetlab/cisco_n9kv_v2:10.5-dnlab")
     assert _needs_persist_bind("quay.io/frrouting/frr:10.2.6-dnlab")
+    assert _needs_persist_bind("vrnetlab/dnlab_frr:latest")
+    assert _needs_persist_bind("vrnetlab/dnlab_opnsense")
     assert not _needs_persist_bind("vrnetlab/cisco_n9kv_v2:10.5")
     assert not _needs_persist_bind("quay.io/frrouting/frr:10.2.6")
 
@@ -213,7 +257,7 @@ def test_endpoints_flow_style_in_text(topo_factory):
     assert "endpoints: [" in text
 
 
-def test_realnet_link_materializes_bridge_node(topo_factory):
+def test_realnet_link_is_excluded_from_per_host_topology(topo_factory):
     nodes = {"R1": VDNode(name="R1", kind="linux", image="x")}
     topo = topo_factory(nodes=nodes, links=[], num_workers=0)
     topo.real_nets = {
@@ -230,14 +274,8 @@ def test_realnet_link_materializes_bridge_node(topo_factory):
     files = generate_topology_files(topo, plan)
     parsed = yaml.safe_load(files["master"])
 
-    bridge_nodes = [
-        name for name, cfg in parsed["topology"]["nodes"].items()
-        if cfg.get("kind") == "bridge"
-    ]
-    assert bridge_nodes
-    eps = parsed["topology"]["links"][0]["endpoints"]
-    assert "R1:eth1" in eps
-    assert any(ep.startswith(f"{bridge_nodes[0]}:") for ep in eps)
+    assert list(parsed["topology"]["nodes"]) == ["R1"]
+    assert "links" not in parsed["topology"]
 
 
 def test_micro_topologies_split_local_link_to_host_endpoints(topo_factory):

@@ -212,6 +212,10 @@ Important settings:
   origin checks.
 - `DNLAB_TOPOLOGIES_DIR`, `DNLAB_PERSIST_ROOT`, `DNLAB_LOG_ROOT`,
   `DNLAB_IMAGE_BUILD_WORKSPACE`: host-side storage and log directories.
+- `DNLAB_CONTAINERLAB_RUNTIME_MODE=per-host-apply`: experimental per-host
+  Containerlab runtime. It requires Containerlab `>=0.77.0` on every host.
+  Leave it unset to keep the default `per-vd` runtime; when explicitly enabled,
+  capability failures are fatal and dNLab does not fall back to `per-vd`.
 
 Do not keep real bootstrap admin passwords in `.env`; export them only for the
 single seed command.

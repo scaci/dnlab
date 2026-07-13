@@ -138,6 +138,19 @@ def test_runtime_relay_roundtrip(tmp_path: Path):
 
 def test_node_runtime_and_runtime_links_roundtrip(tmp_path: Path):
     state = _sample_state()
+    state.runtime_mode = "per-host-apply"
+    state.containerlab_versions = {"master": "0.77.0"}
+    state.host_apply_status = {"master": "applied"}
+    state.host_apply_plan = {
+        "master": [
+            {
+                "action": "added links",
+                "details": "R1:eth1 -- R2:eth1",
+                "nodes": ["R1", "R2"],
+            }
+        ]
+    }
+    state.reconcile_required = True
     state.node_runtime = {
         "R1": NodeRuntimeState(
             node="R1",
@@ -147,6 +160,7 @@ def test_node_runtime_and_runtime_links_roundtrip(tmp_path: Path):
             topology_file="/tmp/dnlab-triangle-R1-worker1.clab.yml",
             kind="linux",
             image="alpine",
+            apply_mode="live",
             mgmt_ipv4="172.20.0.11",
             last_error="manual stop",
         ),
@@ -181,7 +195,13 @@ def test_node_runtime_and_runtime_links_roundtrip(tmp_path: Path):
     loaded = load_state("triangle", tmp_path)
 
     assert loaded.node_runtime["R1"].state == "stopped"
+    assert loaded.runtime_mode == "per-host-apply"
+    assert loaded.containerlab_versions == {"master": "0.77.0"}
+    assert loaded.host_apply_status == {"master": "applied"}
+    assert loaded.host_apply_plan["master"][0]["action"] == "added links"
+    assert loaded.reconcile_required is True
     assert loaded.node_runtime["R1"].container == "clab-dnlab-triangle-R1-R1"
+    assert loaded.node_runtime["R1"].apply_mode == "live"
     assert loaded.mgmt_ip_reservations["removed-node"] == "172.20.0.12"
     assert loaded.mgmt_anchors["worker1"].container == (
         "clab-dnlab-triangle-mgmt-worker1-mgmt-anchor"

@@ -143,6 +143,26 @@ async def lab_status(
     return dumped
 
 
+@router.post("/{lab_id}/events/watch")
+async def lab_events_watch(
+    lab_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    lab = await _resolve_read(lab_id, db, user)
+    return await _ctrl.watch_containerlab_events(lab)
+
+
+@router.post("/{lab_id}/events/stop")
+async def lab_events_stop(
+    lab_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    lab = await _resolve_read(lab_id, db, user)
+    return await _ctrl.stop_containerlab_events(lab)
+
+
 @router.post("/{lab_id}/deploy")
 async def deploy_lab(
     lab_id: UUID,
@@ -246,6 +266,30 @@ async def stop_node(
     result = await _ctrl.node_stop(lab, node_name)
     await audit.record(
         db, event="lab.node_stop", user=user, request=request,
+        resource=str(lab.id),
+        detail={
+            "display_name": lab.display_name,
+            "node": node_name,
+            "success": result.get("success"),
+        },
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/{lab_id}/nodes/{node_name}/restart")
+async def restart_node(
+    lab_id: UUID,
+    node_name: str,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    lab = await _resolve_write(lab_id, db, user)
+    log.info("POST /api/labs/%s/nodes/%s/restart (user=%s)", lab_id, node_name, user.username)
+    result = await _ctrl.node_restart(lab, node_name)
+    await audit.record(
+        db, event="lab.node_restart", user=user, request=request,
         resource=str(lab.id),
         detail={
             "display_name": lab.display_name,

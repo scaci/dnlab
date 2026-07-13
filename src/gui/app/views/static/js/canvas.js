@@ -527,6 +527,7 @@ const Canvas = (() => {
         image:    n.data('image'),
         position: { x: Math.round(n.position().x), y: Math.round(n.position().y) },
         extra:    n.data('extra') || {},
+        node_features_state: n.data('node_features_state') || null,
       }));
     const links = cy.edges()
       .filter(e => !_isMgmtEdgeLike(e))
@@ -583,6 +584,7 @@ const Canvas = (() => {
     if (updates.runtime_state !== undefined) node.data('runtime_state', updates.runtime_state || '');
     if (updates.runtime_container !== undefined) node.data('runtime_container', updates.runtime_container || '');
     if (updates.runtime_topology_file !== undefined) node.data('runtime_topology_file', updates.runtime_topology_file || '');
+    if (updates.runtime_apply_mode !== undefined) node.data('runtime_apply_mode', updates.runtime_apply_mode || '');
     if (updates.runtime_last_error !== undefined) node.data('runtime_last_error', updates.runtime_last_error || '');
     if (updates.scheduled_host !== undefined) node.data('scheduled_host', updates.scheduled_host || '');
     if (updates.placement_mismatch !== undefined) node.data('placement_mismatch', !!updates.placement_mismatch);
@@ -653,8 +655,9 @@ const Canvas = (() => {
       node.data('runtime_state', info.state || '');
       node.data('runtime_container', info.container || '');
       node.data('runtime_topology_file', info.topology_file || '');
+      node.data('runtime_apply_mode', info.apply_mode || '');
       node.data('runtime_last_error', info.last_error || '');
-      node.toggleClass('node-stopped', info.state === 'stopped');
+      node.toggleClass('node-stopped', _isRuntimeStopped(info.state));
       node.toggleClass('node-runtime-error', info.state === 'error');
       node.toggleClass('node-runtime-busy', info.state === 'starting' || info.state === 'stopping');
     });
@@ -1219,6 +1222,10 @@ const Canvas = (() => {
     }).toArray().sort((x, y) => String(x.id()).localeCompare(String(y.id())));
   }
 
+  function _isRuntimeStopped(state) {
+    return state === 'stopped' || state === 'exited' || state === 'dead';
+  }
+
   // ── Data helpers ─────────────────────────────────────────────────────
   function _nodeData(n) {
     const kind = n.kind || 'linux';
@@ -1238,6 +1245,7 @@ const Canvas = (() => {
       runtime_state: n.runtime_state || '',
       runtime_container: n.runtime_container || '',
       runtime_topology_file: n.runtime_topology_file || '',
+      runtime_apply_mode: n.runtime_apply_mode || '',
       runtime_last_error: n.runtime_last_error || '',
       runtime_host: n.runtime_host || '',
       scheduled_host: n.scheduled_host || '',

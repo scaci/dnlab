@@ -569,6 +569,7 @@ const Properties = (() => {
     const state = nodeData.runtime_state || '';
     const container = nodeData.runtime_container || '';
     const topoFile = nodeData.runtime_topology_file || '';
+    const applyMode = nodeData.runtime_apply_mode || '';
     const lastError = nodeData.runtime_last_error || '';
     const duplicates = Array.isArray(nodeData.duplicate_hosts) ? nodeData.duplicate_hosts : [];
     const mismatch = !!nodeData.placement_mismatch;
@@ -593,6 +594,7 @@ const Properties = (() => {
           <span class="${cls}">${_esc(host || scheduled || 'unknown')}</span>
           ${details.length ? `<span class="webui-pending">${_esc(details.join(' · '))}</span>` : ''}
         </div>
+        ${applyMode ? `<div class="webui-default-row"><span>Apply policy</span><span>${_esc(applyMode)}</span></div>` : ''}
         ${container ? `<div class="webui-default-row"><span>Container</span><span>${_esc(container)}</span></div>` : ''}
         ${topoFile ? `<div class="webui-default-row"><span>Topology</span><span>${_esc(topoFile)}</span></div>` : ''}
         ${lastError ? `<div class="webui-default-row"><span>Error</span><span class="webui-pending">${_esc(lastError)}</span></div>` : ''}
@@ -603,6 +605,8 @@ const Properties = (() => {
   function _runtimeStateClass(state) {
     if (state === 'running') return 'webui-host-port';
     if (state === 'stopped') return 'webui-pending';
+    if (state === 'exited') return 'webui-pending';
+    if (state === 'dead') return 'webui-pending';
     if (state === 'error') return 'webui-pending';
     return 'webui-pending';
   }

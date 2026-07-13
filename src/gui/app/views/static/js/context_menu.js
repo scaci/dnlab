@@ -11,6 +11,7 @@
  *   ContextMenu.on('properties', cb)
  *   ContextMenu.on('start-vd',   cb)
  *   ContextMenu.on('stop-vd',    cb)
+ *   ContextMenu.on('restart-vd', cb)
  *   ContextMenu.on('wipe-disk',  cb)
  *   ContextMenu.on('remove',     cb)
  *   ContextMenu.on('capture-mgmt', cb)
@@ -44,16 +45,32 @@ const ContextMenu = (() => {
 
     const runCls = isNodeRunning ? '' : 'cm-disabled';
     const runtimeState = nodeData.runtime_state || (isNodeRunning ? 'running' : '');
-    const isPerVdRuntime = _isPerVdRuntime(nodeData);
+    const hasManagedRuntime = _isManagedRuntime(nodeData);
+    const isPendingRuntime = isLabRunning
+      && (runtimeState === '' || runtimeState === 'missing')
+      && !hasManagedRuntime
+      && nodeData.kind !== '_real_net'
+      && nodeData.kind !== '_mgmt';
+    const isManagedRuntime = hasManagedRuntime || isPendingRuntime;
     const isBusy = runtimeState === 'starting' || runtimeState === 'stopping';
-    const canStop = isLabRunning && isPerVdRuntime && runtimeState === 'running' && !isBusy;
-    const canStart = isLabRunning && isPerVdRuntime && (runtimeState === 'stopped' || runtimeState === 'error') && !isBusy;
+    const isStartable = isPendingRuntime
+      || runtimeState === 'stopped'
+      || runtimeState === 'exited'
+      || runtimeState === 'dead'
+      || runtimeState === 'error';
+    const canStop = isLabRunning && isManagedRuntime && runtimeState === 'running' && !isBusy;
+    const canStart = isLabRunning && isManagedRuntime && isStartable && !isBusy;
+    const canRestart = isLabRunning && isManagedRuntime && runtimeState === 'running' && !isBusy;
     const stopCls = canStop ? '' : 'cm-disabled';
     const startCls = canStart ? '' : 'cm-disabled';
+    const restartCls = canRestart ? '' : 'cm-disabled';
     const labTitle = isLabRunning ? '' : 'Lab not deployed';
-    const runtimeTitle = isPerVdRuntime ? '' : 'Available only on per-VD runtime deployments';
+    const runtimeTitle = isManagedRuntime ? '' : 'Available only on dNLab managed runtime deployments';
     const stopTitle = canStop ? '' : (labTitle || runtimeTitle || 'VD is not running');
-    const startTitle = canStart ? '' : (labTitle || runtimeTitle || 'VD is not stopped');
+    const startTitle = canStart
+      ? (isPendingRuntime ? 'Apply lab changes and start VD' : '')
+      : (labTitle || runtimeTitle || 'VD is not stopped');
+    const restartTitle = canRestart ? '' : (labTitle || runtimeTitle || 'VD is not running');
 
     const webuiItems = _webuiItems(nodeData, isNodeRunning);
     const mgmtCapture = _mgmtCaptureItem(nodeData, isNodeRunning);
@@ -81,6 +98,9 @@ const ContextMenu = (() => {
       </div>
       <div class="cm-item ${startCls}" data-action="start-vd" title="${startTitle}">
         ▶️ Start VD
+      </div>
+      <div class="cm-item ${restartCls}" data-action="restart-vd" title="${restartTitle}">
+        🔁 Restart VD
       </div>
       <div class="cm-sep"></div>
       <div class="cm-item" data-action="rename">
@@ -178,10 +198,13 @@ const ContextMenu = (() => {
     return `from VD ${node || ''} - interface ${iface || '-'}`;
   }
 
-  function _isPerVdRuntime(nodeData) {
+  function _isManagedRuntime(nodeData) {
     const container = String(nodeData.runtime_container || '');
     const topoFile = String(nodeData.runtime_topology_file || '');
-    return container.startsWith('clab-dnlab-') || /\/dnlab-[^/]+\.clab\.ya?ml$/.test(topoFile);
+    const isPerVd = container.startsWith('clab-dnlab-')
+      || /\/dnlab-[^/]+\.clab\.ya?ml$/.test(topoFile);
+    const isPerHostApply = /\/dnlab-[^/]+-[^/]+\.clab\.ya?ml$/.test(topoFile);
+    return isPerVd || isPerHostApply;
   }
 
   /**
