@@ -137,6 +137,13 @@ to the GHCR images selected by `DNLAB_IMAGE_PREFIX` and `DNLAB_VERSION`.
 - **Single-node or multi-node operation** — a lab can run on one host or be
   spread automatically across multiple worker nodes.
 - **Automatic, transparent orchestration** — placement, scheduling, and link management are handled for you; no manual host assignment required.
+- **Live topology growth** — add and start new virtual devices and connect new
+  links while a per-VD lab is running. dNLab complements Containerlab's
+  topology lifecycle with non-disruptive per-device expansion: there is no
+  lab-wide redeploy, and existing devices are not restarted, recreated or
+  moved. Per-device scheduling, micro-topologies and warm links keep the
+  existing runtime intact. See
+  [Grow A Running Lab](docs/USER_GUIDE.md#grow-a-running-lab).
 - **Lab sharing and interconnection** — share labs with other users and connect labs together.
 - **RBAC-based collaboration** — built-in roles and permissions simplify teamwork on shared labs.
 - **Persistent VD disks** — supported virtual devices can keep disk state under

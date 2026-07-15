@@ -83,7 +83,8 @@ placement, image availability and warnings before confirming the start.
 
 During deployment and teardown, the footer shows live events. A deployed lab has
 active dNLab runtime infrastructure; each virtual device also has its own state
-such as `running`, `stopped`, `starting`, `stopping` or `error`.
+such as `running`, `stopped`, `starting`, `reconciling`, `cancelling`,
+`stopping` or `error`.
 
 ![Running lab](images/user-lab-running.png)
 
@@ -111,6 +112,63 @@ Common actions include:
 
 Infrastructure nodes such as `bridge`, `ovs-bridge` or `host` may not provide a
 useful serial console.
+
+### Grow A Running Lab
+
+A per-device lab can be expanded while it is running. Add the new virtual
+device to the canvas, configure its image, interfaces and options, and save it
+to the topology. Then open its context menu and select **Start VD**.
+
+dNLab schedules and deploys only the new device. It does not redeploy the lab
+or run a general topology reconcile, and the existing virtual devices are not
+restarted, recreated, moved or reconfigured. Their containers, placement and
+forwarding remain active while the new device boots.
+
+After Start VD is requested, Start is disabled, forced Stop is available and a
+rotating gear marks the device while it is `starting` or `reconciling`. Some
+virtual devices take several minutes to boot. The gear disappears when the
+attempt reaches `running`, `stopped` or `error`. Forced Stop cancels the active
+attempt and cleans up the new runtime without removing the device from the
+saved topology.
+
+You may request Start for more than one new device without waiting for each
+boot to finish. Runtime mutations are serialized, so later requests remain
+queued and start in sequence.
+
+Links added while the lab is running are saved first and reconciled
+automatically:
+
+- `up`: both endpoints are running and the dataplane link is active;
+- `partial`: an endpoint is not running yet; the link is shown as an amber
+  dashed line and is completed when the endpoint starts;
+- `error`: live activation failed; the link is shown as a red dashed line and
+  its diagnostic remains available for a later retry.
+
+Node and link changes remain in the topology after cancellation or live
+activation errors. Correct the reported problem, then use Start VD or
+Reconcile to retry without rebuilding the rest of the lab.
+
+### Current Live-Add Limitations
+
+- Live addition requires a lab deployed with the per-device runtime layout.
+  Older legacy deployments must be stopped and redeployed once before they can
+  use this workflow.
+- The selected image must be available on the scheduled host, declare the
+  `warm-links-v1` capability and use a supported runtime profile. FRR is the
+  validated reference; other enabled development images remain experimental
+  until their device-specific certification is complete.
+- Live VD endpoints must use `ethN` interface names and stay within the warm
+  port capacity prepared when the device boots. Using a higher interface index
+  requires restarting that device with a larger supported capacity.
+- A link remains `partial` until both virtual-device endpoints are running.
+- Changes to the image, resource allocation or advanced configuration of an
+  already deployed device are not applied by live-add and require a normal lab
+  redeploy.
+- Adding links is reconciled live. Removing or changing an existing link does
+  not yet guarantee immediate removal of its previous runtime dataplane; stop
+  and redeploy the lab when the old connection must be removed with certainty.
+- Runtime mutations are serialized. Concurrent requests may be queued rather
+  than executed in parallel.
 
 ## Device Web UI
 
