@@ -39,6 +39,7 @@ _OVERLAY_REPLACEMENT = (
 _PROVENANCE_MARKER = "# dnlab-patched: persist-overlay-v1"
 
 _OPTIONAL_IPV6_MARKER = "# dnlab-patched: optional-mgmt-ipv6-v1"
+_WARM_LINK_MARKER = "# dnlab-patched: warm-links-v1"
 
 
 def patch_persist_overlay(text: str) -> tuple[str, bool]:
@@ -136,4 +137,162 @@ def patch_optional_mgmt_ipv6(text: str) -> tuple[str, bool]:
 
     first_anchor = anchors[0][1]
     text = text.replace(first_anchor, f"{_OPTIONAL_IPV6_MARKER}\n        {first_anchor}", 1)
+    return text, True
+
+
+def patch_warm_links(text: str) -> tuple[str, bool]:
+    """Add fast NIC polling and a launcher-owned QEMU carrier controller."""
+    if _WARM_LINK_MARKER in text:
+        return text, True
+
+    delay_anchor = "            time.sleep(5)\n\n        # check if we need to provision"
+    delay_replacement = (
+        "            try:\n"
+        "                poll_interval = float(os.environ.get(\"DNLAB_NIC_POLL_INTERVAL\", \"5\"))\n"
+        "            except (TypeError, ValueError):\n"
+        "                poll_interval = 5.0\n"
+        "            time.sleep(max(0.02, min(poll_interval, 5.0)))\n\n"
+        "        # check if we need to provision"
+    )
+    if delay_anchor not in text or "class QemuBroken" not in text:
+        return text, False
+    text = text.replace(delay_anchor, delay_replacement, 1)
+
+    qemu_anchor = '        self.logger.debug("qemu cmd: {}".format(" ".join(cmd)))\n'
+    qemu_replacement = (
+        '        # DNLAB warm ports: pause before the guest executes so the\n'
+        '        # controller can force carrier down through the monitor.\n'
+        '        if int(os.environ.get("DNLAB_WARM_PORTS", "0") or 0) > 0:\n'
+        '            cmd.append("-S")\n\n'
+        + qemu_anchor
+    )
+    if qemu_anchor not in text:
+        return text, False
+    text = text.replace(qemu_anchor, qemu_replacement, 1)
+
+    controller = r'''
+
+# dnlab-patched: warm-links-v1
+def _dnlab_warm_link_controller(vr):
+    import re as _re
+    import socket as _socket
+    import threading as _threading
+    import time as _time
+
+    try:
+        warm_ports = int(os.environ.get("DNLAB_WARM_PORTS", "0"))
+        vm_index = int(os.environ.get("DNLAB_WARM_VM_INDEX", "0"))
+    except (TypeError, ValueError):
+        vr.logger.error("invalid DNLAB warm-link configuration")
+        return
+    if warm_ports <= 0:
+        return
+    if vm_index < 0 or vm_index >= len(vr.vms):
+        vr.logger.error("DNLAB_WARM_VM_INDEX %s is outside vr.vms", vm_index)
+        return
+
+    vm = vr.vms[vm_index]
+    lock = _threading.Lock()
+
+    # Publish the control socket before waiting for QEMU.  A client may queue
+    # its request in the listen backlog while initial carrier state is being
+    # applied; this closes the container-running/socket-ready race.
+    path = "/run/dnlab-link-control.sock"
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+    server = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    server.bind(path)
+    os.chmod(path, 0o660)
+    server.listen(8)
+
+    def monitor_ready():
+        if getattr(vm, "use_scrapli", False):
+            return vm.scrapli_qm.isalive()
+        return getattr(vm, "qm", None) is not None
+
+    # QEMU was launched with -S.  Initialise carrier before allowing the
+    # guest to execute, which avoids both model-specific NIC properties and
+    # a transient carrier-up window.
+    while not monitor_ready():
+        _time.sleep(0.05)
+    try:
+        with lock:
+            for index in range(1, warm_ports + 1):
+                vm._qemu_monitor_cmd(f"set_link p{index:02d} off", wait=True)
+    except Exception:
+        vr.logger.exception("failed to initialise one or more DNLAB warm ports")
+    finally:
+        # Never strand QEMU in the paused state because of a bad override or
+        # a template-specific NIC mismatch.
+        with lock:
+            vm._qemu_monitor_cmd("cont", wait=True)
+
+    def wait_monitor(timeout=300.0):
+        deadline = _time.monotonic() + timeout
+        while _time.monotonic() < deadline:
+            if getattr(vm, "running", False):
+                if monitor_ready():
+                    return
+            _time.sleep(0.05)
+        raise TimeoutError("QEMU monitor did not become ready")
+
+    def set_link(iface, state):
+        match = _re.fullmatch(r"eth([1-9][0-9]*)", iface)
+        if not match:
+            raise ValueError("interface must match ethN with N >= 1")
+        index = int(match.group(1))
+        if index > warm_ports:
+            raise ValueError(f"{iface} exceeds configured warm-port count {warm_ports}")
+        if state not in {"up", "down"}:
+            raise ValueError("state must be up or down")
+        wait_monitor()
+        with lock:
+            vm._qemu_monitor_cmd(
+                f"set_link p{index:02d} {'on' if state == 'up' else 'off'}",
+                wait=True,
+            )
+
+    with server:
+        while True:
+            conn, _ = server.accept()
+            with conn:
+                try:
+                    request = conn.recv(4096).decode().strip().split()
+                    if len(request) != 2:
+                        raise ValueError("request must be: ethN up|down")
+                    set_link(request[0], request[1])
+                    response = f"OK {request[0]} {request[1]}\n"
+                except Exception as exc:
+                    response = f"ERROR {type(exc).__name__}: {exc}\n"
+                try:
+                    conn.sendall(response.encode())
+                except BrokenPipeError:
+                    pass
+
+
+_dnlab_original_vr_start = VR.start
+
+
+def _dnlab_vr_start(self):
+    import threading as _threading
+    try:
+        warm_ports = int(os.environ.get("DNLAB_WARM_PORTS", "0") or 0)
+    except (TypeError, ValueError):
+        warm_ports = 0
+        self.logger.error("DNLAB_WARM_PORTS must be an integer")
+    if warm_ports > 0:
+        _threading.Thread(
+            target=_dnlab_warm_link_controller,
+            args=(self,),
+            name="dnlab-warm-links",
+            daemon=True,
+        ).start()
+    return _dnlab_original_vr_start(self)
+
+
+VR.start = _dnlab_vr_start
+'''
+    text = text.replace("\nclass QemuBroken", controller + "\n\nclass QemuBroken", 1)
     return text, True

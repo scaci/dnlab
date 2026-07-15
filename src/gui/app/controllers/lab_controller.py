@@ -127,7 +127,11 @@ class LabController:
         log.info("API node_start: %s/%s (%s)", lab.display_name, node_name, lab.netname)
         try:
             state = await multinode.node_start(lab, node_name)
-            return {"success": True, "output": "", "state": state}
+            cancelled = state.get("_operation_outcome") == "cancelled"
+            return {
+                "success": True, "cancelled": cancelled,
+                "output": "", "state": state,
+            }
         except MultinodeServiceError as exc:
             log.error("Node start failed: %s", exc)
             return {"success": False, "output": str(exc)}
@@ -139,7 +143,10 @@ class LabController:
         log.info("API node_stop: %s/%s (%s)", lab.display_name, node_name, lab.netname)
         try:
             state = await multinode.node_stop(lab, node_name)
-            return {"success": True, "output": "", "state": state}
+            return {
+                "success": True, "cancelled": bool(state.get("cancelled")),
+                "output": "", "state": state,
+            }
         except MultinodeServiceError as exc:
             log.error("Node stop failed: %s", exc)
             return {"success": False, "output": str(exc)}
@@ -169,6 +176,18 @@ class LabController:
             return {"success": False, "output": str(exc)}
         except Exception as exc:
             log.exception("Node reconcile crashed")
+            return {"success": False, "output": f"{type(exc).__name__}: {exc}"}
+
+    async def link_reconcile(self, lab: ResolvedLab, link: dict) -> dict:
+        log.info("API link_reconcile: %s (%s): %s", lab.display_name, lab.netname, link)
+        try:
+            state = await multinode.link_reconcile(lab, link)
+            return {"success": True, "output": "", "link": state}
+        except MultinodeServiceError as exc:
+            log.error("Link reconcile failed: %s", exc)
+            return {"success": False, "output": str(exc)}
+        except Exception as exc:
+            log.exception("Link reconcile crashed")
             return {"success": False, "output": f"{type(exc).__name__}: {exc}"}
 
     async def realnet_reconcile(self, lab: ResolvedLab, realnet_name: str) -> dict:

@@ -65,7 +65,7 @@ class ConfigFileOut(BaseModel):
 
 class ImageBuildRequest(BaseModel):
     kind: str = Field(min_length=1, max_length=64)
-    source_path: str = Field(min_length=1, max_length=4096)
+    source_path: str | None = Field(default=None, max_length=4096)
     with_persistence: bool = False
 
 
@@ -88,7 +88,7 @@ class ImageBuildJobOut(BaseModel):
     id: str
     status: str
     kind: str
-    source_path: str
+    source_path: str | None
     with_persistence: bool
     created_at: str
     started_at: str | None = None
@@ -101,7 +101,7 @@ class ImageBuildJobOut(BaseModel):
 class _ImageBuildJob:
     id: str
     kind: str
-    source_path: str
+    source_path: str | None
     with_persistence: bool
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: datetime | None = None
@@ -133,6 +133,18 @@ def _image_build_dir() -> Path:
 
 def _image_build_workspace() -> Path:
     return Path(os.getenv("DNLAB_IMAGE_BUILD_WORKSPACE", PATHS.image_build_workspace))
+
+
+def _cleanup_local_image_build_upload(source_path: str | None) -> None:
+    if not source_path:
+        return
+    try:
+        source = Path(source_path).resolve()
+        uploads = (_image_build_workspace() / "uploads").resolve()
+        if source.is_relative_to(uploads) and source.parent.parent == uploads:
+            shutil.rmtree(source.parent, ignore_errors=True)
+    except OSError:
+        pass
 
 
 def _vrnetlab_dir() -> Path:
@@ -386,16 +398,25 @@ async def create_image_build_job(
     script = root / "build_image.py"
     if not script.exists():
         raise HTTPException(503, f"image-build script not found: {script}")
-    source = Path(body.source_path).expanduser()
-    if not source.exists():
-        raise HTTPException(400, f"source image not found: {source}")
-    _validate_local_image_build_source(body.kind, source)
+    module = _load_image_build_module(root)
+    self_building = set(getattr(module, "SELF_BUILDING_KINDS", ())) if module else set()
+    if body.kind in self_building:
+        if body.source_path:
+            raise HTTPException(400, f"self-building kind '{body.kind}' does not accept source_path")
+        source = None
+    else:
+        if not body.source_path:
+            raise HTTPException(400, f"kind '{body.kind}' requires an uploaded source image")
+        source = Path(body.source_path).expanduser()
+        if not source.exists():
+            raise HTTPException(400, f"source image not found: {source}")
+        _validate_local_image_build_source(body.kind, source)
 
     with_persistence = _local_image_kind_has_patch(body.kind)
     job = _ImageBuildJob(
         id=secrets.token_hex(8),
         kind=body.kind,
-        source_path=str(source),
+        source_path=str(source) if source else None,
         with_persistence=with_persistence,
     )
     _JOBS[job.id] = job
@@ -591,7 +612,8 @@ def _local_image_build_kinds() -> dict:
             "patchable": patchable,
             "vrnetlab": [],
             "kinds": [
-                {"kind": kind, "patchable": True, "builder": "dnlab-image-build", "vrnetlab_dir": None}
+                {"kind": kind, "patchable": True, "builder": "dnlab-image-build", "vrnetlab_dir": None,
+                 "source_required": kind != "dnlab_frr"}
                 for kind in patchable
             ],
         }
@@ -611,6 +633,7 @@ def _local_image_build_kinds() -> dict:
             "vrnetlab_dir": item["vrnetlab_dir"],
             "image_globs": image_globs,
             "image_examples": _image_examples_for(vrnetlab_dir, image_globs),
+            "source_required": kind not in getattr(module, "SELF_BUILDING_KINDS", ()),
         }
     for kind in patchable:
         by_kind.setdefault(kind, {
@@ -620,6 +643,7 @@ def _local_image_build_kinds() -> dict:
             "vrnetlab_dir": None,
             "image_globs": [],
             "image_examples": [],
+            "source_required": kind not in getattr(module, "SELF_BUILDING_KINDS", ()),
         })
     return {
         "root": str(root),
@@ -887,9 +911,9 @@ def _atomic_write(path: Path, content: str) -> Path | None:
 async def _run_image_build_job(job: _ImageBuildJob, root: Path, script: Path) -> None:
     job.status = "running"
     job.started_at = datetime.now(timezone.utc)
-    cmd = [sys.executable, str(script), job.kind, job.source_path]
-    if job.with_persistence:
-        cmd.append("--with-persistence")
+    cmd = [sys.executable, str(script), job.kind]
+    if job.source_path:
+        cmd.append(job.source_path)
     job.log.append("$ " + " ".join(cmd))
     proc: asyncio.subprocess.Process | None = None
     token: int | None = None
@@ -934,6 +958,7 @@ async def _run_image_build_job(job: _ImageBuildJob, root: Path, script: Path) ->
     finally:
         if token is not None:
             shutdown_registry.unregister(token)
+        _cleanup_local_image_build_upload(job.source_path)
         job.finished_at = datetime.now(timezone.utc)
 
 

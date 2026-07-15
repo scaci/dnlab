@@ -819,7 +819,7 @@
       "interfaces": {
         "linux_fmt": "eth{n}",
         "vendor_fmt": "GigabitEthernet0/0/0/{i}",
-        "count": 10
+        "count": 16
       },
       "resources": {
         "cpu": {

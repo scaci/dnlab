@@ -32,6 +32,7 @@ import json
 import logging
 from pathlib import Path
 import shlex
+import threading
 from types import SimpleNamespace
 from typing import Any
 
@@ -48,6 +49,16 @@ log = logging.getLogger(__name__)
 # One lock for GUI process: serialises deploy / destroy. Plan / status
 # / sync remain concurrent.
 _deploy_lock = asyncio.Lock()
+
+
+@dataclasses.dataclass
+class _LocalNodeStart:
+    cancel: threading.Event
+    done: asyncio.Event
+    phase: str = "queued"
+
+
+_local_node_starts: dict[tuple[str, str], _LocalNodeStart] = {}
 
 
 class MultinodeServiceError(Exception):
@@ -318,7 +329,20 @@ class MultinodeService:
             ctrl = StatusController(str(topo_path), **kwargs)
             report = ctrl.run()
             return report.to_dict()
-        return await asyncio.to_thread(_status)
+        report = await asyncio.to_thread(_status)
+        for (netname, node), operation in list(_local_node_starts.items()):
+            if netname != lab.netname or operation.done.is_set():
+                continue
+            info = (report.get("nodes") or {}).get(node)
+            if info is not None:
+                active = operation.phase != "stopped"
+                info.update({
+                    "state": operation.phase,
+                    "can_start": not active,
+                    "can_stop": active,
+                    "operation_active": active,
+                })
+        return report
 
     async def image_sync_status(self) -> dict | None:
         """Return the daemon's published state (or None if unavailable)."""
@@ -649,15 +673,38 @@ class MultinodeService:
                 "/labs/nodes/start",
                 self._lab_payload(lab, topology_file=topo_path, node=node_name),
             )
-        async with _deploy_lock:
-            def _start() -> dict:
-                from dnlab_multinode import NodeLifecycleController
+        key = (lab.netname, node_name)
+        existing = _local_node_starts.get(key)
+        if existing and not existing.done.is_set():
+            raise MultinodeServiceError(f"Start already active for node {node_name!r}")
+        operation = _LocalNodeStart(threading.Event(), asyncio.Event())
+        _local_node_starts[key] = operation
+        try:
+            async with _deploy_lock:
+                def _phase(value: str) -> None:
+                    operation.phase = value
 
-                state = NodeLifecycleController(
-                    str(topo_path), hosts_file=self._hosts_file,
-                ).start(node_name)
-                return state.to_dict() if hasattr(state, "to_dict") else {}
-            return await asyncio.to_thread(_start)
+                def _start() -> dict:
+                    from dnlab_multinode import NodeLifecycleController
+
+                    state = NodeLifecycleController(
+                        str(topo_path), hosts_file=self._hosts_file,
+                        cancel_event=operation.cancel,
+                        phase_callback=_phase,
+                    ).start(node_name)
+                    result = state.to_dict() if hasattr(state, "to_dict") else {}
+                    result["_operation_outcome"] = (
+                        "cancelled" if operation.cancel.is_set() else "completed"
+                    )
+                    return result
+                return await asyncio.to_thread(_start)
+        except Exception:
+            if operation.cancel.is_set():
+                return {"_operation_outcome": "cancelled", "cancelled": True}
+            raise
+        finally:
+            operation.done.set()
+            _local_node_starts.pop(key, None)
 
     async def node_stop(self, lab: ResolvedLab, node_name: str) -> dict:
         topo_path = _require_file(lab)
@@ -666,14 +713,28 @@ class MultinodeService:
                 "/labs/nodes/stop",
                 self._lab_payload(lab, topology_file=topo_path, node=node_name),
             )
+        operation = _local_node_starts.get((lab.netname, node_name))
+        cancelled_start = False
+        if operation and not operation.done.is_set():
+            cancelled_start = True
+            operation.cancel.set()
+            previous_phase = operation.phase
+            if previous_phase == "queued":
+                operation.phase = "stopped"
+            else:
+                operation.phase = "cancelling"
+            return {"_operation_outcome": "cancelled", "cancelled": True}
         async with _deploy_lock:
             def _stop() -> dict:
                 from dnlab_multinode import NodeLifecycleController
 
                 state = NodeLifecycleController(
                     str(topo_path), hosts_file=self._hosts_file,
-                ).stop(node_name)
-                return state.to_dict() if hasattr(state, "to_dict") else {}
+                ).stop(node_name, force=True)
+                result = state.to_dict() if hasattr(state, "to_dict") else {}
+                if cancelled_start:
+                    result["cancelled"] = True
+                return result
             return await asyncio.to_thread(_stop)
 
     async def node_restart(self, lab: ResolvedLab, node_name: str) -> dict:
@@ -693,6 +754,23 @@ class MultinodeService:
                 return state.to_dict() if hasattr(state, "to_dict") else {}
             return await asyncio.to_thread(_restart)
 
+    async def node_remove(self, lab: ResolvedLab, node_name: str) -> dict:
+        topo_path = _require_file(lab)
+        if self._use_api:
+            return await self._api_post(
+                "/labs/nodes/remove",
+                self._lab_payload(lab, topology_file=topo_path, node=node_name),
+            )
+        async with _deploy_lock:
+            def _remove() -> dict:
+                from dnlab_multinode import NodeLifecycleController
+
+                state = NodeLifecycleController(
+                    str(topo_path), hosts_file=self._hosts_file,
+                ).remove(node_name)
+                return state.to_dict() if hasattr(state, "to_dict") else {}
+            return await asyncio.to_thread(_remove)
+
     async def node_reconcile(self, lab: ResolvedLab, node_name: str | None = None) -> dict:
         topo_path = _require_file(lab)
         if self._use_api:
@@ -710,6 +788,38 @@ class MultinodeService:
                     str(topo_path), hosts_file=self._hosts_file,
                 ).reconcile(node_name)
                 return state.to_dict() if hasattr(state, "to_dict") else {}
+            return await asyncio.to_thread(_reconcile)
+
+    async def link_reconcile(self, lab: ResolvedLab, link: dict) -> dict:
+        topo_path = _require_file(lab)
+        payload = self._lab_payload(lab, topology_file=topo_path, **link)
+        if self._use_api:
+            return await self._api_post("/labs/links/reconcile", payload)
+        async with _deploy_lock:
+            def _reconcile() -> dict:
+                from dnlab_multinode import NodeLifecycleController
+
+                ctrl = NodeLifecycleController(
+                    str(topo_path), hosts_file=self._hosts_file,
+                )
+                source_is_node = link["source"] in ctrl.topo.nodes
+                target_is_node = link["target"] in ctrl.topo.nodes
+                if source_is_node and target_is_node:
+                    state = ctrl.reconcile_link(
+                        link["source"], link["source_iface"],
+                        link["target"], link["target_iface"],
+                    )
+                elif source_is_node:
+                    state = ctrl.reconcile_link(
+                        link["source"], link["source_iface"], real_net=link["target"],
+                    )
+                elif target_is_node:
+                    state = ctrl.reconcile_link(
+                        link["target"], link["target_iface"], real_net=link["source"],
+                    )
+                else:
+                    raise MultinodeServiceError("link must contain at least one VD endpoint")
+                return dataclasses.asdict(state)
             return await asyncio.to_thread(_reconcile)
 
     async def realnet_reconcile(self, lab: ResolvedLab, realnet_name: str) -> dict:

@@ -34,9 +34,15 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+import warm_links
+
 
 TAG_SUFFIX_DEFAULT = "-dnlab"
 DERIVED_NOTICE_PATH = "/usr/share/doc/dnlab/DERIVED_IMAGE_NOTICE.md"
+LINKCTL_SOURCE = Path(__file__).parent / "assets" / "dnlab-linkctl"
+LINKCTL_TARGET = "/usr/local/bin/dnlab-linkctl"
+LINKCTL_PY_SOURCE = Path(__file__).parent / "assets" / "dnlab_linkctl.py"
+LINKCTL_PY_TARGET = "/usr/local/lib/dnlab/dnlab_linkctl.py"
 
 
 def _run(cmd: list[str], check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
@@ -88,6 +94,8 @@ def _build_patched(
     upstream_identity: str,
     dnlab_version: str,
     generated_at: str,
+    warm_profile: dict[str, int | bool] | None,
+    warm_status: str,
 ) -> None:
     dockerfile = build_dir / "Dockerfile"
     notice = build_dir / "DERIVED_IMAGE_NOTICE.md"
@@ -121,12 +129,26 @@ def _build_patched(
         "org.dnlab.patch.kind": kind,
         "org.dnlab.patch.notice": DERIVED_NOTICE_PATH,
     }
+    if warm_profile:
+        labels.update({
+            "org.dnlab.capabilities": "warm-links-v1",
+            "org.dnlab.warm-links.status": warm_status,
+            "org.dnlab.warm-links.default-ports": str(warm_profile["default_ports"]),
+            "org.dnlab.warm-links.max-ports": str(warm_profile["max_ports"]),
+            "org.dnlab.warm-links.vm-index": str(warm_profile["vm_index"]),
+        })
     lines = [f"FROM {upstream}", ""]
     for key, value in labels.items():
         lines.append(f"LABEL {key}={json.dumps(value)}")
     lines.append("")
     for target_path, local_file in patched_files.items():
         lines.append(f"COPY {local_file.name} {target_path}")
+    if warm_profile:
+        shutil.copy2(LINKCTL_SOURCE, build_dir / LINKCTL_SOURCE.name)
+        shutil.copy2(LINKCTL_PY_SOURCE, build_dir / LINKCTL_PY_SOURCE.name)
+        lines.append(f"COPY {LINKCTL_SOURCE.name} {LINKCTL_TARGET}")
+        lines.append(f"COPY {LINKCTL_PY_SOURCE.name} {LINKCTL_PY_TARGET}")
+        lines.append(f"RUN chmod 0755 {LINKCTL_TARGET} {LINKCTL_PY_TARGET}")
     lines.extend(
         [
             "RUN mkdir -p /usr/share/doc/dnlab",
@@ -167,13 +189,28 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="dnlab-image-build-") as td:
         build_dir = Path(td)
-        _extract_files(args.image, mod.FILES, build_dir)
+        warm_profile = warm_links.profile_for(args.kind, args.image)
+        targets = list(mod.FILES)
+        if warm_profile and "/vrnetlab.py" not in targets:
+            targets.append("/vrnetlab.py")
+        _extract_files(args.image, targets, build_dir)
 
         patched: dict[str, Path] = {}
-        for target in mod.FILES:
+        for target in targets:
             local = build_dir / Path(target).name
             original = local.read_text()
-            new_text, notes = mod.apply(target, original)
+            if target in mod.FILES:
+                new_text, notes = mod.apply(target, original)
+            else:
+                new_text, notes = original, []
+            if target == "/vrnetlab.py" and warm_profile:
+                from patches import _common
+                new_text, ok = _common.patch_warm_links(new_text)
+                if not ok:
+                    raise RuntimeError(
+                        f"{target}: warm-link anchors not found; update patches/_common.py"
+                    )
+                notes.append(f"{target}: warm-links-v1 applied")
             for n in notes:
                 print(f"  {n}", file=sys.stderr)
             if new_text != original:
@@ -195,6 +232,8 @@ def main() -> int:
             upstream_identity=upstream_identity,
             dnlab_version=dnlab_version,
             generated_at=generated_at,
+            warm_profile=warm_profile,
+            warm_status=warm_links.validation_status(args.image, upstream_identity),
         )
 
     print(f"built {out_tag}", file=sys.stderr)

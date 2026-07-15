@@ -6,6 +6,9 @@
 tmp/
 temp/
 
+# Internal documentation belongs in the private dnlab-dev-docs repository
+/docs/internal/
+
 # Sensitive/runtime artifacts
 *.sql
 *.dump

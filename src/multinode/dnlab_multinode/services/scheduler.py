@@ -189,6 +189,66 @@ def compute_schedule(
     return plan
 
 
+def classify_links(
+    topo: DistributedTopology,
+    plan: SchedulePlan,
+    *,
+    allow_unscheduled: bool = False,
+) -> SchedulePlan:
+    """Populate link placement for a plan whose node assignments are fixed."""
+    plan.local_links = []
+    plan.cross_host_links = []
+    vxlan_base = ids.dataplane_vxlan_base(topo.name)
+    iface_names_per_host: dict[str, list[str]] = {h: [] for h in plan.assignments}
+
+    for link in topo.links:
+        src_host = plan.host_for_vd(link.source)
+        tgt_host = plan.host_for_vd(link.target)
+        if not src_host or not tgt_host:
+            if allow_unscheduled:
+                continue
+            raise ScheduleError(f"link references unscheduled node: {link}")
+        if src_host == tgt_host:
+            plan.local_links.append(link)
+            continue
+        index = len(plan.cross_host_links)
+        src_iface = naming.vxlan_host_iface(topo.name, link.source, link.source_iface)
+        tgt_iface = naming.vxlan_host_iface(topo.name, link.target, link.target_iface)
+        iface_names_per_host[src_host].append(src_iface)
+        iface_names_per_host[tgt_host].append(tgt_iface)
+        plan.cross_host_links.append(CrossHostLink(
+            vxlan_id=vxlan_base + index,
+            source_node=link.source,
+            source_iface=link.source_iface,
+            target_node=link.target,
+            target_iface=link.target_iface,
+            source_host=src_host,
+            target_host=tgt_host,
+            source_host_iface=src_iface,
+            target_host_iface=tgt_iface,
+        ))
+
+    for host, names in iface_names_per_host.items():
+        unique = iter(naming.ensure_unique(names))
+        for link in plan.cross_host_links:
+            if link.source_host == host:
+                link.source_host_iface = next(unique)
+            if link.target_host == host:
+                link.target_host_iface = next(unique)
+
+    for link in topo.real_net_links:
+        host = plan.host_for_vd(link.node)
+        if not host:
+            if allow_unscheduled:
+                continue
+            raise ScheduleError(
+                f"real_net '{link.real_net}' references unscheduled node '{link.node}'"
+            )
+        link.host = host
+        link.bridge_iface = naming.realnet_bridge_iface(link.node, link.iface)
+    return plan
+
+
 def gather_host_resources(ssh_clients: dict) -> dict[str, HostResources]:
     """Query each host for available CPU and RAM.
 

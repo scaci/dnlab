@@ -44,6 +44,7 @@ _C9800_NUM_NICS_REPLACEMENT = "        self.num_nics = max_dp_nics"
 
 _C9800_GEN_MGMT_OLD_MARKER = 'self.logger.info("C9800 image: not creating a separate QEMU mgmt NIC")'
 _C9800_GEN_MGMT_OLD_G1_MARKER = 'self.logger.info("C9800 image: creating QEMU mgmt NIC for GigabitEthernet1")'
+_C9800_GEN_MGMT_OLD_G1_IOS_MARKER = 'self.logger.info("C9800 image: creating QEMU mgmt NIC for IOS GigabitEthernet1")'
 _C9800_GEN_MGMT_MARKER = 'self.logger.info("C9800 image: creating QEMU mgmt NIC for IOS GigabitEthernet2")'
 _C9800_GEN_MGMT_ANCHOR = '''        else:
             self.logger.info("C9800 image without startup config; not attaching bootstrap ISO")
@@ -142,6 +143,8 @@ def _patch_launch(text: str) -> tuple[str, bool]:
 
     if _C9800_GEN_MGMT_OLD_G1_MARKER in text:
         text = text.replace(_C9800_GEN_MGMT_OLD_G1_MARKER, _C9800_GEN_MGMT_MARKER, 1)
+    if _C9800_GEN_MGMT_OLD_G1_IOS_MARKER in text:
+        text = text.replace(_C9800_GEN_MGMT_OLD_G1_IOS_MARKER, _C9800_GEN_MGMT_MARKER, 1)
 
     if _C9800_GEN_MGMT_MARKER in text:
         pass

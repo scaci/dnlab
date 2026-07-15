@@ -18,7 +18,7 @@ from dnlab_multinode.services import (
     generator, netsetup, vxlan, jumphost, dns as dns_svc, state as state_svc,
     webui_ports as webui_ports_svc, realnet as realnet_svc,
     persistence as persistence_svc, runtime_links as runtime_links_svc,
-    runtime_relay as runtime_relay_svc,
+    runtime_relay as runtime_relay_svc, warm_links as warm_links_svc,
 )
 from dnlab_multinode.services.hostsfile import HostEntry
 from dnlab_multinode.services.progress import (
@@ -78,6 +78,7 @@ class DeployController:
             topology_file=self.topology_file,
             deployed_at=datetime.now().isoformat(timespec="seconds"),
             vrf_table_id=plan.vrf_table_id,
+            runtime_mode="per-vd",
         )
         self._state.mgmt_ip_reservations = dict(
             topo.raw.get("dnlab_mgmt_ip_reservations") or {}
@@ -89,6 +90,8 @@ class DeployController:
             for client in self._clients.values():
                 client.connect()
 
+            self._phase("image-capabilities", "Inspecting warm-link image capabilities",
+                        self._inspect_image_capabilities, topo, plan)
             self._phase("underlay", "Resolving underlay IPs",
                         self._resolve_underlay_ips, topo)
             self._phase("mgmt-setup", "Setting up mgmt infrastructure",
@@ -154,6 +157,29 @@ class DeployController:
             raise
         self._progress.emit(phase, "ok", detail=f"{detail} — done")
         return result
+
+    def _inspect_image_capabilities(self, topo, plan):
+        """Trust capability labels from the exact image on its assigned host.
+
+        Repository tags are intentionally insufficient: a reused tag may point
+        at a different digest.  ``apply.py`` emits ``validated`` only when the
+        base repository, tag and digest match the qualification registry.
+        """
+        for node_name, node in topo.nodes.items():
+            if not warm_links_svc.profile_for_node(node):
+                continue
+            host = plan.host_for_vd(node_name)
+            if not host or host not in self._clients:
+                node.env[warm_links_svc.IMAGE_STATUS_ENV] = "missing"
+                continue
+            status = warm_links_svc.inspect_image_on_host(
+                node, self._clients[host],
+            )
+            log.info(
+                "[%s] image capability for %s (%s): %s base=%s",
+                host, node_name, node.image, status,
+                node.env.get(warm_links_svc.BASE_DIGEST_ENV, "unknown"),
+            )
 
     # ── Phase 1: Resolve underlay IPs ───────────────────────────────
 
@@ -414,6 +440,8 @@ class DeployController:
                     kind=vd.kind,
                     image=vd.image,
                     mgmt_ipv4=vd.mgmt_ipv4,
+                    warm_ports=warm_links_svc.capacity_for_node(topo, vd_name),
+                    hot_links_status=warm_links_svc.status_for_node(vd),
                 ))
             return host_name, deployed
 

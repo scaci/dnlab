@@ -5,6 +5,9 @@ Applies:
   * blank-startup in /launch.py — vIOS must boot without applying a
     default startup configuration when /config/startup-config.cfg is not
     mounted. A user-provided startup-config is still applied and saved.
+  * bootstrap sanitisation for containerlab configs generated without IPv6;
+    malformed empty IPv6 commands and banner removals that can block scrapli
+    are skipped.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ FILES = [
 
 
 _BLANK_STARTUP_MARKER = "# dnlab-patched: vios-blank-startup-v1"
+_SANITIZE_MARKER = "# dnlab-patched: vios-bootstrap-sanitize-v1"
 
 _BLANK_STARTUP_ANCHOR = """        if not os.path.exists(STARTUP_CONFIG_FILE):
             self.logger.fatal("Failed to find startup configuration file")
@@ -99,6 +103,39 @@ def _patch_vios_blank_startup(text: str) -> tuple[str, bool]:
     return text, False
 
 
+_CONFIG_SEND_ANCHOR = '''        with open(STARTUP_CONFIG_FILE, "r") as config:
+            res = con.send_configs(config.readlines())
+            res += con.send_commands(["write memory"])
+'''
+
+_CONFIG_SEND_REPLACEMENT = f'''        {_SANITIZE_MARKER}
+        with open(STARTUP_CONFIG_FILE, "r") as config:
+            config_lines = []
+            for line in config.readlines():
+                command = line.strip()
+                if command.startswith("ipv6 route ") and command.endswith("::/0"):
+                    self.logger.warning("Skipping incomplete IPv6 route: %s", command)
+                    continue
+                if command.startswith("ipv6 address /0"):
+                    self.logger.warning("Skipping incomplete IPv6 address: %s", command)
+                    continue
+                if command.startswith("no banner "):
+                    self.logger.debug("Skipping optional banner command: %s", command)
+                    continue
+                config_lines.append(line)
+            res = con.send_configs(config_lines)
+            res += con.send_commands(["write memory"])
+'''
+
+
+def _patch_vios_bootstrap_sanitize(text: str) -> tuple[str, bool]:
+    if _SANITIZE_MARKER in text:
+        return text, True
+    if _CONFIG_SEND_ANCHOR not in text:
+        return text, False
+    return text.replace(_CONFIG_SEND_ANCHOR, _CONFIG_SEND_REPLACEMENT, 1), True
+
+
 def apply(path: str, text: str) -> tuple[str, list[str]]:
     """Return (new_text, notes). Raises if a required anchor is missing."""
     notes: list[str] = []
@@ -123,10 +160,20 @@ def apply(path: str, text: str) -> tuple[str, list[str]]:
                 f"{path}: vios blank-startup anchor not found. Upstream launch.py "
                 "likely changed; update patches/cisco_vios.py anchors."
             )
+        sanitized, ok = _patch_vios_bootstrap_sanitize(new_text)
+        if not ok:
+            raise RuntimeError(
+                f"{path}: vios bootstrap sanitiser anchor not found. Upstream "
+                "launch.py likely changed; update patches/cisco_vios.py anchors."
+            )
         if new_text != text:
             notes.append(f"{path}: vios blank-startup applied")
         else:
-            notes.append(f"{path}: already patched")
-        return new_text, notes
+            notes.append(f"{path}: blank-startup already patched")
+        if sanitized != new_text:
+            notes.append(f"{path}: vios bootstrap sanitiser applied")
+        else:
+            notes.append(f"{path}: bootstrap sanitiser already patched")
+        return sanitized, notes
 
     raise RuntimeError(f"{path}: no patch plan for this file")

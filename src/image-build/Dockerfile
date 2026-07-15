@@ -3,6 +3,7 @@ FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    DOCKER_BUILDKIT=1 \
     DNLAB_IMAGE_BUILD_WORKSPACE=/var/lib/dnlab-image-build
 
 WORKDIR /opt/dnlab-image-build
@@ -10,8 +11,11 @@ WORKDIR /opt/dnlab-image-build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
+        bzip2 \
+        docker-buildx \
         docker-cli \
         docker.io \
+        git \
         make \
         qemu-utils \
     && rm -rf /var/lib/apt/lists/*

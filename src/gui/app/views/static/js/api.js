@@ -131,6 +131,7 @@ const API = (() => {
     stopNode:  (id, node)           => request('POST',  `/api/labs/${id}/nodes/${encodeURIComponent(node)}/stop`),
     restartNode: (id, node)         => request('POST',  `/api/labs/${id}/nodes/${encodeURIComponent(node)}/restart`),
     reconcileNode: (id, node)       => request('POST',  `/api/labs/${id}/nodes/${encodeURIComponent(node)}/reconcile`),
+    reconcileLink: (id, link)       => request('POST',  `/api/labs/${id}/links/reconcile`, link),
     reconcileRealNet: (id, node)    => request('POST',  `/api/labs/${id}/realnet/${encodeURIComponent(node)}/reconcile`),
     setMgmtConfig: (id, mgmt) =>
       request('PUT', `/api/labs/${id}/topology/mgmt`, mgmt),

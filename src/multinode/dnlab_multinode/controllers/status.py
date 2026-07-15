@@ -45,6 +45,9 @@ class NodeStatus:
     uptime_seconds: int = 0
     topology_file: str = ""
     last_error: str = ""
+    can_start: bool = False
+    can_stop: bool = False
+    operation_active: bool = False
     # Mappa delle Web UI esposte da clab via ``-p``: lista di
     # ``{container_port, host_port, bind_ip, proto}``. Vuota se il
     # nodo non ha Web UI dichiarate o il lab non è deployato.
@@ -66,6 +69,9 @@ class NodeStatus:
             "uptime_seconds": self.uptime_seconds,
             "topology_file": self.topology_file,
             "last_error": self.last_error,
+            "can_start": self.can_start,
+            "can_stop": self.can_stop,
+            "operation_active": self.operation_active,
             "webui_ports": self.webui_ports,
         }
 
@@ -116,6 +122,7 @@ class StatusReport:
     deployed: bool
     dnlab_deployed: bool = False
     deployed_at: str = ""
+    runtime_mode: str = ""
     hosts: dict[str, HostStatus] = field(default_factory=dict)
     nodes: dict[str, NodeStatus] = field(default_factory=dict)
     cross_host_links: int = 0
@@ -128,6 +135,7 @@ class StatusReport:
             "deployed": self.deployed,
             "dnlab_deployed": self.dnlab_deployed,
             "deployed_at": self.deployed_at,
+            "runtime_mode": self.runtime_mode,
             "hosts": {n: h.to_dict() for n, h in self.hosts.items()},
             "nodes": {n: v.to_dict() for n, v in self.nodes.items()},
             "cross_host_links": self.cross_host_links,
@@ -168,6 +176,7 @@ class StatusController:
             deployed=state is not None,
             dnlab_deployed=state.dnlab_deployed if state else False,
             deployed_at=state.deployed_at if state else "",
+            runtime_mode=state.runtime_mode if state else "",
         )
 
         self._collect_host_summary(topo, state, report)
@@ -220,6 +229,7 @@ class StatusController:
                     "host_endpoint_b": link.host_endpoint_b,
                     "vxlan_id": link.vxlan_id,
                     "last_error": link.last_error,
+                    "validation_error": link.validation_error,
                 }
                 for link in state.runtime_links
             ]
@@ -338,12 +348,35 @@ class StatusController:
                 duplicate_hosts=duplicate_hosts,
                 topology_file=runtime.topology_file if runtime else "",
                 last_error=runtime.last_error if runtime else "",
+                can_start=bool(
+                    state.dnlab_deployed
+                    and state.runtime_mode == "per-vd"
+                    and (runtime is None or runtime.state in {"stopped", "error"})
+                ),
+                can_stop=bool(
+                    state.dnlab_deployed
+                    and state.runtime_mode == "per-vd"
+                    and runtime is not None
+                    and runtime.state in {
+                        "starting", "reconciling", "running", "cancelling", "error",
+                    }
+                ),
+                operation_active=bool(
+                    runtime and runtime.state in {
+                        "queued", "starting", "reconciling", "cancelling",
+                    }
+                ),
             )
 
-            if live_info is not None:
+            if runtime and runtime.state in {
+                "queued", "starting", "reconciling", "cancelling", "stopping",
+            }:
+                ns.state = runtime.state
+                ns.started_at = runtime.started_at
+            elif live_info is not None:
                 ns.state = live_info["state"]
                 ns.started_at = live_info["status"]
-            elif runtime and runtime.state in {"stopped", "stopping", "starting", "error"}:
+            elif runtime and runtime.state in {"stopped", "error"}:
                 ns.state = runtime.state
                 ns.started_at = runtime.started_at
             elif not host_name:

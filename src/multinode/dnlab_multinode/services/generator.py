@@ -13,6 +13,7 @@ from dnlab_multinode.services.images import image_for
 from dnlab_multinode.services.mgmt_ips import ipv4_reservations
 from dnlab_multinode.services.paths import PATHS, persist_dir_for, persist_dir_for_node
 from dnlab_multinode.utils import naming
+from dnlab_multinode.services import warm_links
 
 log = logging.getLogger(__name__)
 
@@ -311,7 +312,20 @@ def _build_node_dict(
     if vd.mgmt_ipv4:
         node_dict["mgmt-ipv4"] = vd.mgmt_ipv4
     if vd.env:
-        node_dict["env"] = dict(vd.env)
+        node_dict["env"] = {
+            key: value for key, value in vd.env.items()
+            if key not in {
+                warm_links.IMAGE_STATUS_ENV,
+                warm_links.BASE_DIGEST_ENV,
+            }
+        }
+    warm_capacity = warm_links.capacity_for_node(topo, vd_name)
+    if warm_capacity:
+        profile = warm_links.profile_for_node(vd)
+        env = node_dict.setdefault("env", {})
+        env["DNLAB_WARM_PORTS"] = str(warm_capacity)
+        env.setdefault("DNLAB_NIC_POLL_INTERVAL", "0.05")
+        env.setdefault("DNLAB_WARM_VM_INDEX", str(profile["vm_index"]))
     if vd.extra:
         extra_clean = {k: v for k, v in vd.extra.items() if k != "webui_ports"}
         if "webui_ports" in vd.extra:
@@ -399,6 +413,23 @@ def _build_micro_clab_dict(
                 f"host:{endpoint_names[(lid, rn_link.node, rn_link.iface)]}",
             ]})
 
+    warm_capacity = warm_links.capacity_for_node(topo, vd_name)
+    if warm_capacity:
+        attached = {
+            endpoint.split(":", 1)[1]
+            for item in links
+            for endpoint in item["endpoints"]
+            if endpoint.startswith(f"{vd_name}:")
+        }
+        for index in range(1, warm_capacity + 1):
+            iface = f"eth{index}"
+            if iface in attached:
+                continue
+            links.append({"endpoints": [
+                f"{vd_name}:{iface}",
+                f"host:{naming.runtime_port_endpoint(topo.name, vd_name, iface)}",
+            ]})
+
     clab = {
         "name": naming.micro_topology_name(topo.name, vd_name),
         "mgmt": {
@@ -452,22 +483,32 @@ def _micro_host_endpoints(topo: DistributedTopology, plan: SchedulePlan) -> dict
         host = plan.host_for_vd(link.source) or ""
         for node, iface in [(link.source, link.source_iface), (link.target, link.target_iface)]:
             key = (lid, node, iface)
-            raw[key] = naming.runtime_host_endpoint(topo.name, node, iface, lid)
+            raw[key] = _runtime_endpoint_name(topo, node, iface, lid)
             per_host.setdefault(host, []).append(key)
 
     for link_id, cl in enumerate(plan.cross_host_links):
         lid = f"vx{link_id}"
         source_key = (lid, cl.source_node, cl.source_iface)
         target_key = (lid, cl.target_node, cl.target_iface)
-        raw[source_key] = cl.source_host_iface
-        raw[target_key] = cl.target_host_iface
+        raw[source_key] = _runtime_endpoint_name(
+            topo, cl.source_node, cl.source_iface, lid, fallback=cl.source_host_iface,
+        )
+        raw[target_key] = _runtime_endpoint_name(
+            topo, cl.target_node, cl.target_iface, lid, fallback=cl.target_host_iface,
+        )
         per_host.setdefault(cl.source_host, []).append(source_key)
         per_host.setdefault(cl.target_host, []).append(target_key)
 
     for link_id, rn_link in enumerate(topo.real_net_links):
         lid = f"rn{link_id}"
         key = (lid, rn_link.node, rn_link.iface)
-        raw[key] = rn_link.bridge_iface or naming.realnet_bridge_iface(rn_link.node, rn_link.iface)
+        raw[key] = _runtime_endpoint_name(
+            topo,
+            rn_link.node,
+            rn_link.iface,
+            lid,
+            fallback=rn_link.bridge_iface or naming.realnet_bridge_iface(rn_link.node, rn_link.iface),
+        )
         per_host.setdefault(rn_link.host, []).append(key)
 
     out = dict(raw)
@@ -476,6 +517,19 @@ def _micro_host_endpoints(topo: DistributedTopology, plan: SchedulePlan) -> dict
         for key, unique_name in zip(keys, naming.ensure_unique(names)):
             out[key] = unique_name
     return out
+
+
+def _runtime_endpoint_name(
+    topo: DistributedTopology,
+    node_name: str,
+    iface: str,
+    link_id: str,
+    *,
+    fallback: str | None = None,
+) -> str:
+    if warm_links.is_enabled(topo.nodes[node_name]):
+        return naming.runtime_port_endpoint(topo.name, node_name, iface)
+    return fallback or naming.runtime_host_endpoint(topo.name, node_name, iface, link_id)
 
 
 def _fix_endpoints_flow(clab_dict: dict) -> str:

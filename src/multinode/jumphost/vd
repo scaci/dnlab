@@ -44,33 +44,23 @@ die_usage() {
 }
 
 vd_names() {
-    if [ -n "${JUMPHOST_VD_LIST:-}" ]; then
-        local -a configured_names
-        read -r -a configured_names <<< "$JUMPHOST_VD_LIST"
-        printf '%s\n' "${configured_names[@]}"
-    elif [ -f "$VD_LIST_FILE" ]; then
+    # The file is refreshed live after a hot-add; container environment
+    # variables are only a bootstrap fallback and cannot be changed in place.
+    if [ -f "$VD_LIST_FILE" ]; then
         while IFS= read -r item; do
             [ -n "$item" ] || continue
             printf '%s\n' "${item%%=*}"
         done < "$VD_LIST_FILE"
+    elif [ -n "${JUMPHOST_VD_LIST:-}" ]; then
+        local -a configured_names
+        read -r -a configured_names <<< "$JUMPHOST_VD_LIST"
+        printf '%s\n' "${configured_names[@]}"
     fi
     return 0
 }
 
 resolve_vd_target() {
     name="$1"
-    if [ -n "${JUMPHOST_VD_MAP:-}" ]; then
-        local -a mappings
-        read -r -a mappings <<< "$JUMPHOST_VD_MAP"
-        for item in "${mappings[@]}"; do
-            key="${item%%=*}"
-            value="${item#*=}"
-            if [ "$key" = "$name" ]; then
-                printf '%s\n' "$value"
-                return 0
-            fi
-        done
-    fi
     if [ -f "$VD_LIST_FILE" ]; then
         while IFS= read -r item; do
             [ -n "$item" ] || continue
@@ -81,6 +71,17 @@ resolve_vd_target() {
                 return 0
             fi
         done < "$VD_LIST_FILE"
+    elif [ -n "${JUMPHOST_VD_MAP:-}" ]; then
+        local -a mappings
+        read -r -a mappings <<< "$JUMPHOST_VD_MAP"
+        for item in "${mappings[@]}"; do
+            key="${item%%=*}"
+            value="${item#*=}"
+            if [ "$key" = "$name" ]; then
+                printf '%s\n' "$value"
+                return 0
+            fi
+        done
     fi
     printf '%s\n' "$name"
 }

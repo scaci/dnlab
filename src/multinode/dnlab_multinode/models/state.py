@@ -81,6 +81,8 @@ class NodeRuntimeState:
     mgmt_ipv4: str = ""
     started_at: str = ""
     last_error: str = ""
+    warm_ports: int = 0
+    hot_links_status: str = "unsupported"
 
 
 @dataclass
@@ -101,9 +103,14 @@ class RuntimeLinkState:
     host_b: str = ""
     host_endpoint_a: str = ""
     host_endpoint_b: str = ""
+    container_a: str = ""
+    container_b: str = ""
+    warm_a: bool = False
+    warm_b: bool = False
     vxlan_id: int = 0
     state: str = "down"
     last_error: str = ""
+    validation_error: bool = False
 
 
 @dataclass
@@ -148,6 +155,10 @@ class DeploymentState:
     topology_file: str
     deployed_at: str = ""
     dnlab_deployed: bool = True
+    # ``per-vd`` deployments use one Containerlab micro-topology per node and
+    # can therefore grow while the shared lab infrastructure stays online.
+    # An empty/legacy value is deliberately conservative for old state files.
+    runtime_mode: str = ""
     vrf_table_id: int = 0
     mgmt: MgmtState | None = None
     jumphost: JumphostState | None = None
@@ -189,6 +200,7 @@ class DeploymentState:
             topology_file=d["topology_file"],
             deployed_at=d.get("deployed_at", ""),
             dnlab_deployed=d.get("dnlab_deployed", True),
+            runtime_mode=d.get("runtime_mode", ""),
             vrf_table_id=d.get("vrf_table_id", 0),
             phases_completed=d.get("phases_completed", []),
         )
@@ -223,6 +235,12 @@ class DeploymentState:
             state.realnets.append(RealNetState(**rn))
         if not state.node_runtime:
             state._populate_legacy_node_runtime()
+        if not state.runtime_mode and state.node_runtime:
+            prefix = f"clab-dnlab-{state.lab_name}-"
+            if all(runtime.container.startswith(prefix) for runtime in state.node_runtime.values()):
+                state.runtime_mode = "per-vd"
+            else:
+                state.runtime_mode = "legacy"
         if not state.mgmt_ip_reservations:
             state.mgmt_ip_reservations = {
                 node: runtime.mgmt_ipv4

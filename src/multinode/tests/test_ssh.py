@@ -24,3 +24,21 @@ def test_existing_containerlab_commands_quote_topology_paths():
         f"containerlab deploy -t {quoted_topology} --reconfigure",
         f"containerlab destroy -t {quoted_topology} --cleanup",
     ]
+
+
+def test_cancel_active_commands_closes_tracked_channels():
+    client = SSHClient("127.0.0.1", "root", "/tmp/key", name="test")
+
+    class Channel:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    channel = Channel()
+    client._track_channel(channel)
+
+    client.cancel_active_commands()
+
+    assert channel.closed is True

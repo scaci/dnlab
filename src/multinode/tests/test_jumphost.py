@@ -10,12 +10,38 @@ from dnlab_multinode.services.jumphost import (
     allocate_jumphost_ssh_port,
     deploy_jumphost,
     parse_port_range,
+    refresh_jumphost_inventory,
 )
 
 
 def test_parse_port_range_ok():
     assert parse_port_range("2200-2299") == (2200, 2299)
     assert parse_port_range("22-22") == (22, 22)
+
+
+def test_refresh_jumphost_inventory_updates_maps_without_restart():
+    client = MagicMock()
+    client.run_no_check.return_value = (0, "true", "")
+
+    refresh_jumphost_inventory(
+        "demo", client,
+        {"R1": "clab-dnlab-demo-R1-R1", "R2": "clab-dnlab-demo-R2-R2"},
+        {
+            "clab-dnlab-demo-R1-R1": {
+                "host": "10.0.0.10", "port": 23001, "api_key": "secret",
+            },
+            "clab-dnlab-demo-R2-R2": {
+                "host": "10.0.0.11", "port": 23001, "api_key": "secret",
+            },
+        },
+    )
+
+    command = client.run.call_args.args[0]
+    assert command.startswith("docker exec dnlab-demo-jumphost sh -c ")
+    assert "clab-dnlab-demo-R2-R2" in command
+    assert "10.0.0.11:23001:secret" in command
+    assert "mv /etc/dnlab-vds.new /etc/dnlab-vds" in command
+    assert "docker rm" not in command
 
 
 @pytest.mark.parametrize("bad", ["", "2200", "2200-", "-2299", "abc-def", "2300-2200"])
@@ -166,6 +192,7 @@ def test_vd_list_prints_logical_names_from_persisted_map(tmp_path):
         [str(script), "list"],
         env={
             "VD_LIST_FILE": str(vd_file),
+            "JUMPHOST_VD_LIST": "R1",
             "PATH": "/usr/bin:/bin",
         },
         capture_output=True,

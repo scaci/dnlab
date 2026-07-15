@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 from dnlab_multinode.models.state import DeploymentState
@@ -18,7 +20,20 @@ def state_file_path(lab_name: str, directory: Path = Path(".")) -> Path:
 def save_state(state: DeploymentState, directory: Path = Path(".")) -> Path:
     path = state_file_path(state.lab_name, directory)
     data = state.to_dict()
-    path.write_text(json.dumps(data, indent=2))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(data, stream, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise
     log.info("State saved: %s", path)
     return path
 

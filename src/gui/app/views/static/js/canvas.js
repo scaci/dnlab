@@ -32,6 +32,8 @@ const Canvas = (() => {
   let _realNetHoverTip = null;
   let _realNetRemoteAs = '';
   let _rabbitDotLayer = null;
+  let _runtimeGearLayer = null;
+  const _runtimeGearBadges = new Map();
   const _rabbitDots = new Map();
   const _rabbitCompletedSeenAt = new Map();
   const FOLLOW_RABBIT_AFTERGLOW_MS = 30000;
@@ -227,6 +229,14 @@ const Canvas = (() => {
         style: { 'line-color': t.selectColor, 'width': 3 },
       },
       {
+        selector: 'edge.runtime-link-partial',
+        style: { 'line-color': '#f59e0b', 'line-style': 'dashed', 'width': 3 },
+      },
+      {
+        selector: 'edge.runtime-link-error',
+        style: { 'line-color': '#ef4444', 'line-style': 'dashed', 'width': 4 },
+      },
+      {
         selector: 'edge.capture-active',
         style: {
           'line-color': '#22c55e',
@@ -355,6 +365,8 @@ const Canvas = (() => {
 
     _bindEvents();
     _ensureRabbitDotLayer();
+    _ensureRuntimeGearLayer();
+    cy.on('render', _positionRuntimeGears);
     return cy;
   }
 
@@ -654,9 +666,104 @@ const Canvas = (() => {
       node.data('runtime_container', info.container || '');
       node.data('runtime_topology_file', info.topology_file || '');
       node.data('runtime_last_error', info.last_error || '');
+      node.data('can_start', !!info.can_start);
+      node.data('can_stop', !!info.can_stop);
+      node.data('operation_active', !!info.operation_active);
       node.toggleClass('node-stopped', info.state === 'stopped');
       node.toggleClass('node-runtime-error', info.state === 'error');
       node.toggleClass('node-runtime-busy', ['starting', 'stopping', 'restarting'].includes(info.state));
+    });
+    _syncRuntimeGears();
+  }
+
+  function setNodeOperation(nodeName, state, active = true) {
+    if (!cy) return;
+    const node = cy.getElementById(nodeName);
+    if (!node.length) return;
+    node.data('runtime_state', state || '');
+    node.data('operation_active', !!active);
+    node.data('can_start', !active && ['stopped', 'error', 'missing'].includes(state));
+    node.data('can_stop', !!active || ['running', 'error'].includes(state));
+    node.toggleClass('node-runtime-busy', !!active);
+    node.toggleClass('node-stopped', state === 'stopped');
+    _syncRuntimeGears();
+  }
+
+  function hasActiveNodeOperations() {
+    if (!cy) return false;
+    return cy.nodes().some(node => !_isMgmtId(node.id()) && !!node.data('operation_active'));
+  }
+
+  function _ensureRuntimeGearLayer() {
+    if (!cy || _runtimeGearLayer) return;
+    _runtimeGearLayer = document.createElement('div');
+    _runtimeGearLayer.className = 'runtime-gear-layer';
+    _runtimeGearLayer.setAttribute('aria-hidden', 'true');
+    cy.container().appendChild(_runtimeGearLayer);
+  }
+
+  function _syncRuntimeGears() {
+    if (!cy) return;
+    _ensureRuntimeGearLayer();
+    const active = new Set();
+    cy.nodes().forEach(node => {
+      const id = node.data('id');
+      if (_isMgmtId(id) || !node.data('operation_active')) return;
+      active.add(id);
+      if (!_runtimeGearBadges.has(id)) {
+        const badge = document.createElement('div');
+        badge.className = 'runtime-gear-badge';
+        badge.dataset.nodeId = id;
+        badge.innerHTML = '<img src="/img/status/runtime-gear.svg" alt="">';
+        _runtimeGearLayer.appendChild(badge);
+        _runtimeGearBadges.set(id, badge);
+      }
+    });
+    for (const [id, badge] of _runtimeGearBadges.entries()) {
+      if (active.has(id)) continue;
+      badge.remove();
+      _runtimeGearBadges.delete(id);
+    }
+    _positionRuntimeGears();
+  }
+
+  function _positionRuntimeGears() {
+    if (!cy) return;
+    for (const [id, badge] of _runtimeGearBadges.entries()) {
+      const node = cy.getElementById(id);
+      if (!node.length || !node.visible()) {
+        badge.style.display = 'none';
+        continue;
+      }
+      const pos = node.renderedPosition();
+      const radius = (node.renderedWidth() || NODE_ICON_SIZE) / 2;
+      badge.style.display = '';
+      badge.style.left = `${pos.x + radius - 3}px`;
+      badge.style.top = `${pos.y - radius + 3}px`;
+    }
+  }
+
+  function setRuntimeLinks(runtimeLinks) {
+    if (!cy) return;
+    const links = Array.isArray(runtimeLinks) ? runtimeLinks : [];
+    cy.edges().forEach(edge => {
+      if (_isMgmtEdgeLike(edge)) return;
+      const edgeEndpoints = [
+        `${edge.data('source')}:${edge.data('source_iface') || ''}`,
+        `${edge.data('target')}:${edge.data('target_iface') || ''}`,
+      ].sort().join('|');
+      const runtime = links.find(link => {
+        const endpoint = value => value.node
+          ? `${value.node}:${value.iface || ''}`
+          : `${value.real_net}:real`;
+        return [endpoint(link.endpoint_a || {}), endpoint(link.endpoint_b || {})]
+          .sort().join('|') === edgeEndpoints;
+      });
+      const state = runtime?.state || '';
+      edge.data('runtime_link_state', state);
+      edge.data('runtime_link_error', runtime?.last_error || '');
+      edge.toggleClass('runtime-link-partial', state === 'partial');
+      edge.toggleClass('runtime-link-error', state === 'error');
     });
   }
 
@@ -980,6 +1087,7 @@ const Canvas = (() => {
     _clearRabbitDots();
     _stopRabbitPulse();
     cy.elements().remove();
+    _syncRuntimeGears();
   }
 
   /**
@@ -1239,6 +1347,9 @@ const Canvas = (() => {
       runtime_container: n.runtime_container || '',
       runtime_topology_file: n.runtime_topology_file || '',
       runtime_last_error: n.runtime_last_error || '',
+      can_start: !!n.can_start,
+      can_stop: !!n.can_stop,
+      operation_active: !!n.operation_active,
       runtime_host: n.runtime_host || '',
       scheduled_host: n.scheduled_host || '',
       placement_mismatch: !!n.placement_mismatch,
@@ -1599,7 +1710,8 @@ const Canvas = (() => {
     fit, clear, on, projectPosition,
     setMgmt, clearMgmt, hasMgmt, getMgmtPosition, setMgmtVisible, isMgmtId,
     setRealNetInfoVisible, toggleRealNetInfoVisible, setRealNetRemoteAs,
-    setWebUIRuntime, setMgmtRuntime, setPlacementRuntime, setNodeRuntime,
+    setWebUIRuntime, setMgmtRuntime, setPlacementRuntime, setNodeRuntime, setNodeOperation,
+    hasActiveNodeOperations, setRuntimeLinks,
     MGMT_ID,
   };
 })();

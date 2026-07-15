@@ -6,6 +6,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from dnlab_multinode import api
+from dnlab_multinode.models.state import RuntimeLinkState
 
 
 @dataclasses.dataclass
@@ -76,8 +77,12 @@ class _FakeStatusController:
 
 
 class _FakeNodeLifecycleController:
-    def __init__(self, topology_file, *, hosts_file=None):
-        pass
+    def __init__(
+        self, topology_file, *, hosts_file=None, cancel_event=None, phase_callback=None,
+    ):
+        self.topo = dataclasses.make_dataclass("Topo", [("nodes", dict)])(
+            {"r1": object(), "r2": object()}
+        )
 
     def list_nodes(self):
         return {
@@ -86,7 +91,7 @@ class _FakeNodeLifecycleController:
             )("r1", "running")
         }
 
-    def stop(self, node):
+    def stop(self, node, *, force=False):
         return _FakeState()
 
     def start(self, node):
@@ -97,6 +102,14 @@ class _FakeNodeLifecycleController:
 
     def reconcile(self, node):
         return _FakeState()
+
+    def reconcile_link(self, node_a, iface_a, node_b="", iface_b="", real_net=""):
+        return RuntimeLinkState(
+            id="l0", link_type="same_host",
+            endpoint_a={"node": node_a, "iface": iface_a},
+            endpoint_b={"node": node_b, "iface": iface_b},
+            state="up",
+        )
 
 
 def test_plan_endpoint_uses_controller(monkeypatch):
@@ -152,6 +165,90 @@ def test_node_restart_endpoint_uses_per_vd_controller(monkeypatch):
     )
 
     assert res == {"lab_name": "demo", "dnlab_deployed": True}
+
+
+def test_node_start_endpoint_reports_completed_operation(monkeypatch):
+    monkeypatch.setattr(api, "NodeLifecycleController", _FakeNodeLifecycleController)
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+
+    result = asyncio.run(
+        api.lab_node_start(api.NodeRequest(topology_file="/tmp/demo.yml", node="r1"))
+    )
+
+    assert result["_operation_outcome"] == "completed"
+
+
+def test_duplicate_start_is_rejected_while_operation_is_registered():
+    async def exercise():
+        req = api.NodeRequest(topology_file="/tmp/demo.yml", node="r1")
+        key = api._node_operation_key(req)
+        operation = api._ActiveNodeStart(api.threading.Event(), asyncio.Event())
+        api._active_node_starts[key] = operation
+        try:
+            with pytest.raises(api.HTTPException) as exc:
+                await api.lab_node_start(req)
+            assert exc.value.status_code == 409
+        finally:
+            api._active_node_starts.pop(key, None)
+
+    asyncio.run(exercise())
+
+
+def test_stop_cancels_queued_start_without_waiting_for_global_lock():
+    async def exercise():
+        req = api.NodeRequest(topology_file="/tmp/demo.yml", node="r1")
+        key = api._node_operation_key(req)
+        operation = api._ActiveNodeStart(api.threading.Event(), asyncio.Event())
+        api._active_node_starts[key] = operation
+        try:
+            result = await api.lab_node_stop(req)
+            assert result["cancelled"] is True
+            assert operation.cancel.is_set()
+            assert operation.phase == "stopped"
+        finally:
+            api._active_node_starts.pop(key, None)
+
+    asyncio.run(exercise())
+
+
+def test_stop_interrupts_running_start_controller():
+    class Controller:
+        def __init__(self):
+            self.cancelled = False
+
+        def request_cancel(self):
+            self.cancelled = True
+
+    async def exercise():
+        req = api.NodeRequest(topology_file="/tmp/demo.yml", node="r1")
+        key = api._node_operation_key(req)
+        operation = api._ActiveNodeStart(api.threading.Event(), asyncio.Event())
+        operation.controller = Controller()
+        operation.phase = "reconciling"
+        api._active_node_starts[key] = operation
+        try:
+            result = await api.lab_node_stop(req)
+            assert result["cancelled"] is True
+            assert operation.controller.cancelled is True
+            assert operation.phase == "cancelling"
+        finally:
+            api._active_node_starts.pop(key, None)
+
+    asyncio.run(exercise())
+
+
+def test_link_reconcile_endpoint_returns_exact_runtime_link(monkeypatch):
+    monkeypatch.setattr(api, "NodeLifecycleController", _FakeNodeLifecycleController)
+    monkeypatch.setattr(api.asyncio, "to_thread", _to_thread_sync)
+
+    res = asyncio.run(api.lab_link_reconcile(api.LinkRequest(
+        topology_file="/tmp/demo.yml",
+        source="r1", source_iface="eth1",
+        target="r2", target_iface="eth2",
+    )))
+
+    assert res["state"] == "up"
+    assert res["endpoint_a"] == {"node": "r1", "iface": "eth1"}
 
 
 def test_runtime_relay_endpoint_reads_state(monkeypatch):

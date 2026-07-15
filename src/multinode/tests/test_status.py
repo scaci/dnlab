@@ -12,7 +12,7 @@ from dnlab_multinode.controllers.node import (
 )
 from dnlab_multinode.models.state import (
     DeploymentState, HostScheduleState, JumphostState, DnsState,
-    RuntimeRelayState,
+    NodeRuntimeState, RuntimeRelayState,
 )
 from dnlab_multinode.services import state as state_svc
 
@@ -218,6 +218,63 @@ def test_status_has_no_mismatch_when_live_matches_state(tmp_path, monkeypatch):
     assert report.nodes["R1"].scheduled_host == "worker1"
     assert report.nodes["R1"].placement_mismatch is False
     assert report.nodes["R1"].state == "running"
+
+
+def test_status_marks_new_node_startable_only_for_per_vd_runtime(tmp_path, monkeypatch):
+    topo = _write_inputs(tmp_path)
+    state = DeploymentState(
+        lab_name="lab", topology_file=str(topo), runtime_mode="per-vd",
+    )
+    state.node_runtime = {
+        "R1": NodeRuntimeState(
+            node="R1", host="worker1",
+            container="clab-dnlab-lab-R1-R1",
+            topology_file="/tmp/dnlab-lab-R1-worker1.clab.yml",
+        ),
+    }
+    state.scheduling = {
+        "worker1": HostScheduleState(
+            host="10.0.0.11", topology_file="", vd=["R1"],
+        ),
+    }
+    state_svc.save_state(state, topo.parent)
+    _fake_reachable_docker(monkeypatch, {"worker1": ""})
+
+    report = StatusController(
+        str(topo), hosts_file=str(tmp_path / "hosts.yml"),
+    ).run()
+
+    assert report.nodes["R2"].state == "missing"
+    assert report.nodes["R2"].can_start is True
+    assert report.nodes["R1"].can_start is False
+
+
+def test_status_preserves_reconciling_over_live_docker_state(tmp_path, monkeypatch):
+    topo = _write_inputs(tmp_path)
+    state = DeploymentState(
+        lab_name="lab", topology_file=str(topo), runtime_mode="per-vd",
+    )
+    state.node_runtime = {
+        "R1": NodeRuntimeState(
+            node="R1", state="reconciling", host="worker1",
+            container="clab-dnlab-lab-R1-R1",
+            topology_file="/tmp/dnlab-lab-R1-worker1.clab.yml",
+        ),
+    }
+    state_svc.save_state(state, topo.parent)
+    _fake_reachable_docker(monkeypatch, {
+        "worker1": "clab-dnlab-lab-R1-R1\trunning\tUp 2 minutes",
+    })
+
+    report = StatusController(
+        str(topo), hosts_file=str(tmp_path / "hosts.yml"),
+    ).run()
+
+    node = report.nodes["R1"]
+    assert node.state == "reconciling"
+    assert node.operation_active is True
+    assert node.can_start is False
+    assert node.can_stop is True
 
 
 def test_legacy_runtime_status_still_finds_legacy_container(tmp_path, monkeypatch):

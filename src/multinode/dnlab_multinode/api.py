@@ -13,6 +13,7 @@ import json
 import os
 import shlex
 import subprocess
+import threading
 from collections import defaultdict, deque
 from pathlib import Path
 from types import SimpleNamespace
@@ -65,6 +66,13 @@ class NodeRequest(LabRequest):
     node: str = Field(min_length=1)
 
 
+class LinkRequest(LabRequest):
+    source: str = Field(min_length=1)
+    source_iface: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+    target_iface: str = Field(min_length=1)
+
+
 class RealNetRequest(LabRequest):
     realnet: str = Field(min_length=1)
 
@@ -91,6 +99,21 @@ app = FastAPI(title="dNLab Multinode API", version="0.1.0")
 _mutating_lock = asyncio.Lock()
 _events: dict[str, deque[dict[str, Any]]] = defaultdict(lambda: deque(maxlen=500))
 _subscribers: dict[str, set[tuple[asyncio.AbstractEventLoop, asyncio.Queue]]] = defaultdict(set)
+
+
+@dataclasses.dataclass
+class _ActiveNodeStart:
+    cancel: threading.Event
+    done: asyncio.Event
+    phase: str = "queued"
+    controller: NodeLifecycleController | None = None
+
+
+_active_node_starts: dict[tuple[str, str], _ActiveNodeStart] = {}
+
+
+def _node_operation_key(req: NodeRequest) -> tuple[str, str]:
+    return str(Path(req.topology_file).resolve()), req.node
 
 
 @app.get("/health")
@@ -275,12 +298,26 @@ async def lab_plan(req: PlanRequest) -> dict[str, Any]:
 @app.post("/labs/status")
 async def lab_status(req: LabRequest) -> dict[str, Any]:
     try:
-        return await asyncio.to_thread(
+        report = await asyncio.to_thread(
             lambda: StatusController(
                 req.topology_file,
                 hosts_file=req.hosts_file,
             ).run().to_dict()
         )
+        topo_path = str(Path(req.topology_file).resolve())
+        for (active_topology, node), operation in list(_active_node_starts.items()):
+            if active_topology != topo_path or operation.done.is_set():
+                continue
+            info = (report.get("nodes") or {}).get(node)
+            if info is not None:
+                active = operation.phase != "stopped"
+                info.update({
+                    "state": operation.phase,
+                    "can_start": not active,
+                    "can_stop": active,
+                    "operation_active": active,
+                })
+        return report
     except Exception as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -356,12 +393,76 @@ async def lab_node_resolve_host(req: NodeRequest) -> dict[str, Any]:
 
 @app.post("/labs/nodes/start")
 async def lab_node_start(req: NodeRequest) -> dict[str, Any]:
-    return await _node_mutation(req, "start")
+    key = _node_operation_key(req)
+    existing = _active_node_starts.get(key)
+    if existing and not existing.done.is_set():
+        raise HTTPException(409, f"Start already active for node {req.node!r}")
+    operation = _ActiveNodeStart(threading.Event(), asyncio.Event())
+    _active_node_starts[key] = operation
+    try:
+        async with _mutating_lock:
+            def _phase(value: str) -> None:
+                operation.phase = value
+
+            def _run():
+                ctrl = NodeLifecycleController(
+                    req.topology_file,
+                    hosts_file=req.hosts_file,
+                    cancel_event=operation.cancel,
+                    phase_callback=_phase,
+                )
+                operation.controller = ctrl
+                return ctrl.start(req.node)
+
+            state = await asyncio.to_thread(_run)
+            result = state.to_dict()
+            result["_operation_outcome"] = (
+                "cancelled" if operation.cancel.is_set() else "completed"
+            )
+            return result
+    except Exception as exc:
+        if operation.cancel.is_set():
+            return {
+                "_operation_outcome": "cancelled",
+                "cancelled": True,
+                "node": req.node,
+            }
+        raise HTTPException(422, str(exc)) from exc
+    finally:
+        operation.done.set()
+        _active_node_starts.pop(key, None)
 
 
 @app.post("/labs/nodes/stop")
 async def lab_node_stop(req: NodeRequest) -> dict[str, Any]:
-    return await _node_mutation(req, "stop")
+    operation = _active_node_starts.get(_node_operation_key(req))
+    cancelled_start = False
+    if operation and not operation.done.is_set():
+        cancelled_start = True
+        controller = operation.controller
+        if controller is not None:
+            controller.request_cancel()
+        else:
+            operation.cancel.set()
+        previous_phase = operation.phase
+        if previous_phase == "queued":
+            operation.phase = "stopped"
+        else:
+            operation.phase = "cancelling"
+        return {
+            "_operation_outcome": "cancelled",
+            "cancelled": True,
+            "node": req.node,
+        }
+    result = await _node_mutation(req, "stop", force=True)
+    if cancelled_start:
+        result["cancelled"] = True
+    return result
+
+
+@app.post("/labs/nodes/remove")
+async def lab_node_remove(req: NodeRequest) -> dict[str, Any]:
+    return await _node_mutation(req, "remove", force=True)
 
 
 @app.post("/labs/nodes/restart")
@@ -372,6 +473,34 @@ async def lab_node_restart(req: NodeRequest) -> dict[str, Any]:
 @app.post("/labs/nodes/reconcile")
 async def lab_node_reconcile(req: NodeRequest) -> dict[str, Any]:
     return await _node_mutation(req, "reconcile")
+
+
+@app.post("/labs/links/reconcile")
+async def lab_link_reconcile(req: LinkRequest) -> dict[str, Any]:
+    async with _mutating_lock:
+        try:
+            def _run():
+                ctrl = NodeLifecycleController(req.topology_file, hosts_file=req.hosts_file)
+                source_is_node = req.source in ctrl.topo.nodes
+                target_is_node = req.target in ctrl.topo.nodes
+                if source_is_node and target_is_node:
+                    return ctrl.reconcile_link(
+                        req.source, req.source_iface, req.target, req.target_iface,
+                    )
+                if source_is_node:
+                    return ctrl.reconcile_link(
+                        req.source, req.source_iface, real_net=req.target,
+                    )
+                if target_is_node:
+                    return ctrl.reconcile_link(
+                        req.target, req.target_iface, real_net=req.source,
+                    )
+                raise ValueError("link must contain at least one VD endpoint")
+
+            link = await asyncio.to_thread(_run)
+            return dataclasses.asdict(link)
+        except Exception as exc:
+            raise HTTPException(422, str(exc)) from exc
 
 
 @app.post("/labs/realnet/reconcile")
@@ -481,7 +610,9 @@ async def events_ws(ws: WebSocket, topic: str) -> None:
         _subscribers[topic].discard(subscriber)
 
 
-async def _node_mutation(req: NodeRequest, action: str) -> dict[str, Any]:
+async def _node_mutation(
+    req: NodeRequest, action: str, *, force: bool = False,
+) -> dict[str, Any]:
     async with _mutating_lock:
         try:
             def _run():
@@ -489,9 +620,11 @@ async def _node_mutation(req: NodeRequest, action: str) -> dict[str, Any]:
                 if action == "start":
                     return ctrl.start(req.node)
                 if action == "stop":
-                    return ctrl.stop(req.node)
+                    return ctrl.stop(req.node, force=force)
                 if action == "restart":
                     return ctrl.restart(req.node)
+                if action == "remove":
+                    return ctrl.remove(req.node)
                 return ctrl.reconcile(req.node)
 
             state = await asyncio.to_thread(_run)

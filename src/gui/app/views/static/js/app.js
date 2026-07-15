@@ -40,6 +40,8 @@
   let lastLab = null;
   let lastLiveStatus = null;
   let capturePollTimer = null;
+  const activeNodeStarts = new Map();
+  let statusPollTimer = null;
   const _containerForNode = (name) =>
     (lastLab?.containers || []).find(c => c.node_name === name)
     || (lastLiveStatus?.nodes && lastLiveStatus.nodes[name])
@@ -170,6 +172,7 @@
     try {
       await API.Labs.addNode(currentLabId, node);
       Canvas.addNode(node);
+      if (_labIsRuntimeReconcileable()) await _refreshLabStatus();
       Sidebar.clearPending();
       document.querySelectorAll('.device-card').forEach(c => c.classList.remove('selected'));
     } catch (e) {
@@ -684,10 +687,12 @@
     if (!currentLabId) return;
     try {
       await API.Labs.removeLink(currentLabId, source, target, old_source_iface, old_target_iface);
-      await API.Labs.addLink(currentLabId, { source, source_iface, target, target_iface });
+      const link = { source, source_iface, target, target_iface };
+      await API.Labs.addLink(currentLabId, link);
       Canvas.removeEdge(source, target, old_source_iface, old_target_iface);
       Canvas.addEdge(source, target, source_iface, target_iface);
-      showToast('Link updated', 'success');
+      await _applyLiveLink(link);
+      if (!_labIsRuntimeReconcileable()) showToast('Link updated', 'success');
     } catch (e) {
       showToast('Update failed: ' + e.message, 'error');
     }
@@ -710,12 +715,22 @@
 
   async function _stopRuntimeNode(nodeName, refreshProperties = false) {
     if (!currentLabId) { showToast('Lab not deployed', 'warn'); return; }
+    const activeStart = activeNodeStarts.get(nodeName);
+    if (activeStart) activeStart.cancelRequested = true;
+    Canvas.setNodeOperation(
+      nodeName, activeStart ? 'cancelling' : 'stopping', !!activeStart,
+    );
     try {
       showToast(`Stopping ${nodeName}…`, 'info');
-      await API.Labs.stopNode(currentLabId, nodeName);
+      const result = await API.Labs.stopNode(currentLabId, nodeName);
+      if (!result || result.success === false) throw new Error(result?.output || 'Node stop failed');
       await _refreshLabStatus();
       if (refreshProperties) _refreshOpenNodeProperties(nodeName);
-      showToast(`${nodeName} stopped`, 'success');
+      if (result.cancelled) {
+        showToast(`Forced stop requested for ${nodeName}`, 'info');
+      } else {
+        showToast(`${nodeName} stopped`, 'success');
+      }
     } catch (e) {
       showToast(`Stop failed: ${e.message}`, 'error');
       await _refreshLabStatus();
@@ -725,16 +740,27 @@
 
   async function _startRuntimeNode(nodeName, refreshProperties = false) {
     if (!currentLabId) { showToast('Lab not deployed', 'warn'); return; }
+    if (activeNodeStarts.has(nodeName)) return;
+    const operation = { cancelRequested: false };
+    activeNodeStarts.set(nodeName, operation);
+    Canvas.setNodeOperation(nodeName, 'starting', true);
     try {
       showToast(`Starting ${nodeName}…`, 'info');
-      await API.Labs.startNode(currentLabId, nodeName);
+      const result = await API.Labs.startNode(currentLabId, nodeName);
+      if (!result || result.success === false) throw new Error(result?.output || 'Node start failed');
       await _refreshLabStatus();
       if (refreshProperties) _refreshOpenNodeProperties(nodeName);
-      showToast(`${nodeName} running`, 'success');
+      if (result.cancelled || operation.cancelRequested) {
+        showToast(`${nodeName} start cancelled`, 'info');
+      } else {
+        showToast(`${nodeName} running`, 'success');
+      }
     } catch (e) {
-      showToast(`Start failed: ${e.message}`, 'error');
+      if (!operation.cancelRequested) showToast(`Start failed: ${e.message}`, 'error');
       await _refreshLabStatus();
       if (refreshProperties) _refreshOpenNodeProperties(nodeName);
+    } finally {
+      if (activeNodeStarts.get(nodeName) === operation) activeNodeStarts.delete(nodeName);
     }
   }
 
@@ -742,7 +768,8 @@
     if (!currentLabId) { showToast('Lab not deployed', 'warn'); return; }
     try {
       showToast(`Restarting ${nodeName}…`, 'info');
-      await API.Labs.restartNode(currentLabId, nodeName);
+      const result = await API.Labs.restartNode(currentLabId, nodeName);
+      if (!result || result.success === false) throw new Error(result?.output || 'Node restart failed');
       await _refreshLabStatus();
       if (refreshProperties) _refreshOpenNodeProperties(nodeName);
       showToast(`${nodeName} restarted`, 'success');
@@ -814,6 +841,7 @@
         try {
           await API.Labs.addNode(currentLabId, node);
           Canvas.addNode(node);
+          if (_labIsRuntimeReconcileable()) await _refreshLabStatus();
           Sidebar.clearPending();
           document.querySelectorAll('.device-card').forEach(c => c.classList.remove('selected'));
           showToast(`Aggiunto: ${name}`, 'success');
@@ -886,6 +914,7 @@
             try {
               await API.Labs.addLink(currentLabId, link);
               Canvas.addEdge(link.source, link.target, link.source_iface, link.target_iface);
+              await _applyLiveLink(link);
             } catch (e) { showToast('Add link failed: ' + e.message, 'error'); }
           } },
         { label: 'Cancel' },
@@ -924,6 +953,7 @@
           try {
             await API.Labs.addLink(currentLabId, link);
             Canvas.addEdge(sourceName, targetName, srcIface, tgtIface);
+            await _applyLiveLink(link);
           } catch (e) {
             showToast('Add link failed: ' + e.message, 'error');
           }
@@ -1205,12 +1235,16 @@
             container: info?.container || '',
             topology_file: info?.topology_file || '',
             last_error: info?.last_error || '',
+            can_start: !!info?.can_start,
+            can_stop: !!info?.can_stop,
+            operation_active: !!info?.operation_active,
           };
         }
         Canvas.setWebUIRuntime(byNode);
         Canvas.setMgmtRuntime(mgmtByNode);
         Canvas.setPlacementRuntime(placementByNode);
         Canvas.setNodeRuntime(runtimeByNode);
+        Canvas.setRuntimeLinks(live.runtime_links || []);
       }
     } catch (_) {
       lastLiveStatus = null;
@@ -1336,6 +1370,7 @@
       runtime_container: liveNode.container || nodeData.runtime_container || '',
       runtime_topology_file: liveNode.topology_file || nodeData.runtime_topology_file || '',
       runtime_last_error: liveNode.last_error || nodeData.runtime_last_error || '',
+      can_start: liveNode.can_start ?? nodeData.can_start ?? false,
       placement_mismatch: liveNode.placement_mismatch ?? nodeData.placement_mismatch,
       duplicate_hosts: Array.isArray(liveNode.duplicate_hosts)
         ? liveNode.duplicate_hosts
@@ -1434,7 +1469,12 @@
     }
   }
 
-  setInterval(_refreshLabStatus, 15000);
+  async function _pollLabStatus() {
+    await _refreshLabStatus();
+    const delay = Canvas.hasActiveNodeOperations() ? 5000 : 15000;
+    statusPollTimer = setTimeout(_pollLabStatus, delay);
+  }
+  statusPollTimer = setTimeout(_pollLabStatus, 15000);
 
   // ── Mgmt network helpers ───────────────────────────────────────────
   const DEFAULT_MGMT_SUBNET = '172.20.20.0/24';
@@ -1756,6 +1796,26 @@
 
   function _labIsRuntimeReconcileable() {
     return labStatus === 'running' || labStatus === 'partial';
+  }
+
+  async function _applyLiveLink(link) {
+    if (!_labIsRuntimeReconcileable()) return null;
+    const result = await API.Labs.reconcileLink(currentLabId, link);
+    if (!result || result.success === false) {
+      await _refreshLabStatus();
+      showToast(`Link saved; live reconcile failed: ${result?.output || 'unknown error'}`, 'error');
+      return { state: 'error', last_error: result?.output || 'Live reconcile failed' };
+    }
+    await _refreshLabStatus();
+    const runtime = result.link || {};
+    if (runtime.state === 'error') {
+      showToast(`Link saved but runtime activation failed: ${runtime.last_error || 'unknown error'}`, 'error');
+    } else if (runtime.state === 'partial') {
+      showToast(`Link saved and pending: ${runtime.last_error || 'endpoint not running'}`, 'info');
+    } else if (runtime.state === 'up') {
+      showToast('Link applied live', 'success');
+    }
+    return runtime;
   }
 
   function _escAttr(s) {

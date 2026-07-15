@@ -154,6 +154,13 @@ def runtime_host_endpoint(lab_name: str, node_name: str, iface: str, link_id: st
     return name[:_MAX_IFACE_LEN]
 
 
+def runtime_port_endpoint(lab_name: str, node_name: str, iface: str) -> str:
+    """Stable host endpoint for a warm port, independent of link identity."""
+    digest = hashlib.sha1(f"{lab_name}:{node_name}:{iface}".encode()).hexdigest()[:6]
+    ifs = shorten_iface(iface)[:4] or "if"
+    return f"wp-{ifs}-{digest}"[:_MAX_IFACE_LEN]
+
+
 def realnet_bridge_name(lab_name: str, real_net: str) -> str:
     """Per-lab/per-real_net Linux bridge name, max 15 chars."""
     lab = sanitize_lab_name(lab_name)[:5]

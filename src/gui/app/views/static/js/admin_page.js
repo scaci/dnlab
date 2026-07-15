@@ -974,7 +974,7 @@ const AdminPage = (() => {
               ${buildKinds.map(k => `<option value="${_esc(k.kind)}">${_esc(k.kind)} · ${_esc(_kindBuildLabel(k))}</option>`).join('')}
             </select>
           </label>
-          <label>Upload image
+          <label id="admin-build-upload-label">Upload image
             <input id="admin-build-upload" class="props-input" type="file">
           </label>
           <p id="admin-build-format-hint" class="admin-muted"></p>
@@ -1016,6 +1016,7 @@ const AdminPage = (() => {
         vrnetlab_dir: k.vrnetlab_dir || null,
         image_globs: Array.isArray(k.image_globs) ? k.image_globs : [],
         image_examples: Array.isArray(k.image_examples) ? k.image_examples : [],
+        source_required: k.source_required !== false,
       })).sort((a, b) => String(a.kind).localeCompare(String(b.kind)));
     }
     return (meta?.patchable || []).map(kind => ({
@@ -1025,6 +1026,7 @@ const AdminPage = (() => {
       vrnetlab_dir: null,
       image_globs: [],
       image_examples: [],
+      source_required: true,
     }));
   }
 
@@ -1084,10 +1086,19 @@ const AdminPage = (() => {
     const hint = _content?.querySelector('#admin-build-format-hint');
     if (!hint) return;
     const selected = _selectedBuildKind() || {};
+    const upload = _content?.querySelector('#admin-build-upload');
+    const uploadLabel = _content?.querySelector('#admin-build-upload-label');
+    const sourceRequired = selected.source_required !== false;
+    if (upload) {
+      upload.disabled = !sourceRequired;
+      if (!sourceRequired) upload.value = '';
+    }
+    if (uploadLabel) uploadLabel.firstChild.textContent = sourceRequired ? 'Upload image\n            ' : 'Source-free build\n            ';
     const globs = selected.image_globs || [];
     const examples = selected.image_examples || [];
     const parts = [];
-    if (globs.length) parts.push(`Expected format: ${globs.join(' ')}`);
+    if (!sourceRequired) parts.push('No upload required; built from the managed vrnetlab source');
+    if (sourceRequired && globs.length) parts.push(`Expected format: ${globs.join(' ')}`);
     if (examples.length) parts.push(`Example: ${examples.join(', ')}`);
     hint.textContent = parts.join(' · ');
   }
@@ -1119,18 +1130,27 @@ const AdminPage = (() => {
     const start = _content.querySelector('#admin-build-start');
     const upload = _content.querySelector('#admin-build-upload');
     const file = upload?.files?.[0] || null;
-    if (!file) {
+    const selected = _selectedBuildKind() || {};
+    const sourceRequired = selected.source_required !== false;
+    if (sourceRequired && !file) {
       showToast('Upload an image to build', 'warn');
       return;
     }
     const kind = _content.querySelector('#admin-build-kind').value;
-    const globs = _selectedBuildKind()?.image_globs || [];
-    if (!_matchesGlob(file.name, globs)) {
+    const globs = selected.image_globs || [];
+    if (file && !_matchesGlob(file.name, globs)) {
       _showBuildError(`'${file.name}' non corrisponde al formato atteso (${globs.join(' ')})`);
       return;
     }
     start.disabled = true;
     try {
+      if (!sourceRequired) {
+        _setUploadProgress(-1, 'Building…');
+        await API.Admin.startImageBuild({ kind, source_path: null });
+        showToast('Build started', 'success');
+        await _renderJobs();
+        return;
+      }
       await API.Admin.validateImageBuildFilename({ kind, filename: file.name });
       const form = new FormData();
       form.append('file', file);

@@ -188,3 +188,35 @@ def test_node_runtime_and_runtime_links_roundtrip(tmp_path: Path):
     )
     assert loaded.runtime_links[0].link_type == "cross_host"
     assert loaded.runtime_links[0].state == "partial"
+
+
+def test_runtime_mode_is_inferred_for_pre_field_per_vd_state():
+    state = DeploymentState.from_dict({
+        "lab_name": "demo",
+        "topology_file": "/tmp/demo.yml",
+        "node_runtime": {
+            "R1": {
+                "node": "R1",
+                "container": "clab-dnlab-demo-R1-R1",
+            },
+        },
+    })
+
+    assert state.runtime_mode == "per-vd"
+
+
+def test_runtime_mode_is_conservative_for_legacy_state():
+    state = DeploymentState.from_dict({
+        "lab_name": "demo",
+        "topology_file": "/tmp/demo.yml",
+        "scheduling": {
+            "master": {
+                "host": "10.0.0.10",
+                "topology_file": "/tmp/demo-master.yml",
+                "vd": ["R1"],
+                "resources_used": {},
+            },
+        },
+    })
+
+    assert state.runtime_mode == "legacy"

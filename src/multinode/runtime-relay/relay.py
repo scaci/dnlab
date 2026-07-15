@@ -24,7 +24,10 @@ HOST = os.getenv("RELAY_BIND", "0.0.0.0")
 PORT = int(os.getenv("RELAY_PORT", "23000"))
 API_KEY = os.getenv("RELAY_API_KEY", "")
 ALLOWED = {x for x in os.getenv("RELAY_ALLOWED_CONTAINERS", "").split() if x}
+ALLOWED_PREFIX = os.getenv("RELAY_ALLOWED_PREFIX", "")
 READ_SIZE = 4096
+CONSOLE_PORT_FILE = "/run/dnlab-console-port"
+CONSOLE_PORTS = {str(port) for port in range(5000, 5008)}
 
 
 def _send_line(sock: socket.socket, line: str) -> None:
@@ -43,7 +46,25 @@ def _read_request(sock: socket.socket) -> list[str] | None:
 
 
 def _authorized(key: str, container: str) -> bool:
-    return bool(API_KEY) and compare_digest(key, API_KEY) and container in ALLOWED
+    allowed = container in ALLOWED or _matches_lab_container(container)
+    return bool(API_KEY) and compare_digest(key, API_KEY) and allowed
+
+
+def _matches_lab_container(container: str) -> bool:
+    """Match only ``<prefix><node>-<node>`` per-VD runtime names.
+
+    Merely checking the prefix would let a lab whose name extends another
+    lab's name overlap its relay namespace (for example ``demo`` and
+    ``demo-other``).
+    """
+    if not ALLOWED_PREFIX or not container.startswith(ALLOWED_PREFIX):
+        return False
+    suffix = container[len(ALLOWED_PREFIX):]
+    return any(
+        suffix[:index] == suffix[index + 1:]
+        for index, char in enumerate(suffix)
+        if char == "-" and index > 0 and index + 1 < len(suffix)
+    )
 
 
 def _container_running(container: str) -> bool:
@@ -59,6 +80,22 @@ def _container_running(container: str) -> bool:
 
 
 def _discover_console_port(container: str) -> str:
+    # Version-aware launchers publish the actual guest console.  XRv9k 25.x,
+    # for example, listens on several serial sockets and publishes the one
+    # intended for the interactive user console;
+    # selecting the first socket would connect users to the Linux console.
+    preferred = subprocess.run(
+        ["docker", "exec", container, "cat", CONSOLE_PORT_FILE],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    preferred_port = preferred.stdout.strip() if preferred.returncode == 0 else ""
+    if preferred_port in CONSOLE_PORTS:
+        return preferred_port
+
     expr = (
         "ss -Htln 2>/dev/null | "
         "awk '$1==\"LISTEN\" && $4 !~ /^127\\.0\\.0\\.11:/ "
@@ -74,7 +111,8 @@ def _discover_console_port(container: str) -> str:
         timeout=5,
         check=False,
     )
-    return proc.stdout.strip() if proc.returncode == 0 else ""
+    discovered = proc.stdout.strip() if proc.returncode == 0 else ""
+    return discovered if discovered in CONSOLE_PORTS else ""
 
 
 def _connect_cmd(container: str) -> tuple[list[str], str | None]:
@@ -102,7 +140,7 @@ def _connect_cmd(container: str) -> tuple[list[str], str | None]:
 def _cleanup_container_telnet(container: str, port: str | None) -> None:
     if not port:
         return
-    if port not in {str(p) for p in range(5000, 5008)}:
+    if port not in CONSOLE_PORTS:
         return
     pattern = f"[t]elnet 127[.]0[.]0[.]1 {port}"
     try:

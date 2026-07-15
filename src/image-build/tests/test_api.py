@@ -39,9 +39,9 @@ def test_kinds_include_patchable_and_vrnetlab_builders(monkeypatch, tmp_path):
     monkeypatch.setattr(build_image, "PATCHES_DIR", patches)
 
     vrnetlab = tmp_path / "vrnetlab"
-    (vrnetlab / "openwrt").mkdir(parents=True)
-    (vrnetlab / "openwrt" / "Makefile").write_text("IMAGE_GLOB=*.qcow2\ndocker-image:\n\ttrue\n", encoding="utf-8")
-    (vrnetlab / "openwrt" / "README.md").write_text("Example filename: `openwrt-23.05.qcow2`\n", encoding="utf-8")
+    (vrnetlab / "openwrt_V2").mkdir(parents=True)
+    (vrnetlab / "openwrt_V2" / "Makefile").write_text("IMAGE_GLOB=*.qcow2\ndocker-image:\n\ttrue\n", encoding="utf-8")
+    (vrnetlab / "openwrt_V2" / "README.md").write_text("Example filename: `openwrt-23.05.qcow2`\n", encoding="utf-8")
     (vrnetlab / "f5_bigip").mkdir(parents=True)
     (vrnetlab / "f5_bigip" / "Makefile").write_text("docker-image:\n\ttrue\n", encoding="utf-8")
     monkeypatch.setattr(api, "VRNETLAB_ROOT", vrnetlab)
@@ -59,6 +59,36 @@ def test_kinds_include_patchable_and_vrnetlab_builders(monkeypatch, tmp_path):
     assert by_kind["openwrt"]["image_examples"] == ["openwrt-23.05.qcow2"]
     assert by_kind["f5_bigip"]["builder"] == "vrnetlab-make"
     assert by_kind["f5_bigip"]["patchable"] is False
+
+
+def test_frr_is_source_free_but_other_kinds_require_upload(monkeypatch, tmp_path):
+    patches = tmp_path / "patches"
+    patches.mkdir()
+    (patches / "dnlab_frr.py").write_text("# patch\n", encoding="utf-8")
+    monkeypatch.setattr(build_image, "PATCHES_DIR", patches)
+    vrnetlab = tmp_path / "vrnetlab"
+    frr = vrnetlab / "dnlab" / "frr"
+    frr.mkdir(parents=True)
+    (frr / "Makefile").write_text("docker-image:\n\ttrue\n", encoding="utf-8")
+    monkeypatch.setattr(api, "VRNETLAB_ROOT", vrnetlab)
+    monkeypatch.setattr(api, "SCRIPT", tmp_path / "build_image.py")
+    api.SCRIPT.write_text("# script\n", encoding="utf-8")
+
+    data = api._kinds_payload()
+    by_kind = {item["kind"]: item for item in data["kinds"]}
+    assert by_kind["dnlab_frr"]["source_required"] is False
+
+    def fake_create_task(coro):
+        coro.close()
+        return None
+
+    monkeypatch.setattr(api.asyncio, "create_task", fake_create_task)
+    result = asyncio.run(api.create_job(api.ImageBuildRequest(kind="dnlab_frr")))
+    assert result["source_path"] is None
+    assert result["with_persistence"] is True
+
+    with pytest.raises(HTTPException, match="requires an uploaded source"):
+        asyncio.run(api.create_job(api.ImageBuildRequest(kind="openwrt")))
 
 
 def test_upload_sanitizes_filename_and_returns_source_path(monkeypatch, tmp_path):

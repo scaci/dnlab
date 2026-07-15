@@ -28,6 +28,64 @@ from dnlab_multinode.utils.naming import jumphost_container_name
 log = logging.getLogger(__name__)
 
 
+def _render_inventory_motd(lab_name: str, vd_names: list[str]) -> str:
+    lines = [
+        "",
+        "======================================================",
+        f"  Lab: {lab_name}",
+        "  Virtual Devices in this lab:",
+        *(f"    - {name}" for name in vd_names),
+        "",
+        "  Commands:",
+        "    vd list             → list virtual devices",
+        "    vd connect <name>   → open console",
+        "    vd log <name>       → show container log history",
+        "    vd log -f <name>    → follow container log in real time",
+        "    vd help             → show command help",
+        "======================================================",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def refresh_jumphost_inventory(
+    lab_name: str,
+    client: SSHClient,
+    vd_map: dict[str, str],
+    relay_map: dict[str, dict],
+) -> None:
+    """Atomically refresh the live jumphost VD/relay maps and login banner."""
+    container = jumphost_container_name(lab_name)
+    vd_content = "".join(f"{name}={runtime}\n" for name, runtime in vd_map.items())
+    relay_content = "".join(
+        f"{runtime}={meta['host']}:{int(meta['port'])}:{meta['api_key']}\n"
+        for runtime, meta in relay_map.items()
+    )
+    motd = _render_inventory_motd(lab_name, list(vd_map))
+
+    rc, out, _ = client.run_no_check(
+        f"docker inspect -f '{{{{.State.Running}}}}' {container}"
+    )
+    if rc != 0 or out.strip() != "true":
+        raise RuntimeError(f"Jumphost container '{container}' is not running")
+
+    command = (
+        "set -e; "
+        f"printf %s {shlex.quote(vd_content)} > /etc/dnlab-vds.new; "
+        f"printf %s {shlex.quote(relay_content)} > /etc/dnlab-relays.new; "
+        f"printf %s {shlex.quote(motd)} > /etc/motd.new; "
+        "chown root:labuser /etc/dnlab-vds.new /etc/dnlab-relays.new; "
+        "chmod 644 /etc/dnlab-vds.new; chmod 640 /etc/dnlab-relays.new; "
+        "mv /etc/dnlab-vds.new /etc/dnlab-vds; "
+        "mv /etc/dnlab-relays.new /etc/dnlab-relays; "
+        "mv /etc/motd.new /etc/motd"
+    )
+    client.run(
+        f"docker exec {container} sh -c {shlex.quote(command)}"
+    )
+    log.info("Jumphost inventory refreshed: %d VDs", len(vd_map))
+
+
 def generate_password(length: int = 12) -> str:
     """Generate a random alphanumeric password."""
     alphabet = string.ascii_letters + string.digits

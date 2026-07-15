@@ -22,6 +22,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import audit
@@ -38,6 +39,13 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/labs", tags=["labs"])
 _ctrl = LabController()
+
+
+class LinkReconcileRequest(BaseModel):
+    source: str = Field(min_length=1)
+    source_iface: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+    target_iface: str = Field(min_length=1)
 
 
 # ── List / create ─────────────────────────────────────────────────
@@ -276,6 +284,26 @@ async def reconcile_node(
             "node": node_name,
             "success": result.get("success"),
         },
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/{lab_id}/links/reconcile")
+async def reconcile_link(
+    lab_id: UUID,
+    payload: LinkReconcileRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    lab = await _resolve_write(lab_id, db, user)
+    link = payload.model_dump()
+    result = await _ctrl.link_reconcile(lab, link)
+    await audit.record(
+        db, event="lab.link_reconcile", user=user, request=request,
+        resource=str(lab.id),
+        detail={"display_name": lab.display_name, **link, "success": result.get("success")},
     )
     await db.commit()
     return result

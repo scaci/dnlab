@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /opt/dnlab-gui
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssh-client ca-certificates \
+    && apt-get install -y --no-install-recommends openssh-client ca-certificates make \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

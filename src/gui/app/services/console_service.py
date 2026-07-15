@@ -32,6 +32,8 @@ _READ_SIZE = 4096
 # falling back to the shell.
 _DISCOVER_RETRIES = 10
 _DISCOVER_INTERVAL_S = 1.0
+_CONSOLE_PORT_FILE = "/run/dnlab-console-port"
+_CONSOLE_PORTS = set(range(5000, 5008))
 
 
 class ConsoleService:
@@ -118,6 +120,22 @@ class ConsoleService:
         kinds such as cisco_iol that open their loopback port a few seconds
         after boot.
         """
+        # Prefer a version-aware declaration from the launcher. XRv9k 25.x
+        # exposes several QEMU serial sockets and publishes the one intended
+        # for the interactive user console,
+        # so choosing the first listener would open the wrong console.
+        try:
+            preferred = await self._run_in_container(
+                container, worker_host, f"cat {_CONSOLE_PORT_FILE} 2>/dev/null",
+            )
+        except Exception as exc:
+            log.debug("discover declared console (%s): %s", container.name, exc)
+            preferred = ""
+        if preferred.isdigit() and int(preferred) in _CONSOLE_PORTS:
+            port = int(preferred)
+            log.info("Console %s: launcher-declared port %d", container.name, port)
+            return port
+
         # ``ss -Htln`` → no-header, tcp, listening, no-resolve. Extract local
         # serial console ports reachable from inside the container. Some
         # vrnetlab launchers bind QEMU consoles to wildcard addresses
@@ -142,7 +160,7 @@ class ConsoleService:
                 port = None
             if port and port.isdigit():
                 p = int(port)
-                if 1 <= p <= 65535:
+                if p in _CONSOLE_PORTS:
                     log.info(
                         "Console %s: fallback port %d discovered on attempt %d",
                         container.name, p, attempt + 1,

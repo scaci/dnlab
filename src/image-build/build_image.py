@@ -60,16 +60,17 @@ APPLY_SCRIPT = SCRIPT_DIR / "apply.py"
 DEFAULT_VRNETLAB_ROOT = Path(os.getenv("DNLAB_VRNETLAB_DIR", "/opt/vrnetlab"))
 PERSIST_SUFFIX = "-dnlab"
 
-# kind → relative path inside the vrnetlab root. For kinds with multiple
-# variants (for example cisco_n9kv with legacy + _V2 directories), prefer V2
-# when present because it is the supported and maintained one.
+# kind → relative path inside the vrnetlab root. A kind backed by a _V2
+# directory must list only that directory: legacy builders are deliberately
+# excluded and are never fallback candidates.
 KIND_VRNETLAB_DIR: dict[str, list[str]] = {
     # Cisco
     "cisco_xrv":          ["cisco/xrv"],
     "cisco_xrv9k":        ["cisco/xrv9k_V2"],
     "cisco_n9kv":         ["cisco/n9kv_V2"],
     "cisco_csr1000v":     ["cisco/csr1000v"],
-    "cisco_cat9kv":       ["cisco/cat9kv_V2", "cisco/cat9kv"],
+    "cisco_cat9kv":       ["cisco/cat9kv_V2"],
+    "cisco_c9800cl":      ["cisco/cat9kv_V2"],
     "cisco_iol":          ["cisco/iol"],
     "cisco_vios":         ["cisco/vios_V2"],
     "cisco_c8000v":       ["cisco/c8000v"],
@@ -98,7 +99,7 @@ KIND_VRNETLAB_DIR: dict[str, list[str]] = {
     "ipinfusion_ocnos":   ["ipinfusion/ocnos"],
     "sonic-vs":           ["sonic"],
     "sonic-vm":           ["sonic"],
-    "openwrt":            ["openwrt_V2", "openwrt"],
+    "openwrt":            ["openwrt_V2"],
     "nvidia_cumulusvx":   ["nvidia/cumulusvx"],
     "hp_vsr1000":         ["hp/vsr1000"],
     "f5_bigip":           ["f5_bigip"],
@@ -123,6 +124,10 @@ CONTAINER_NATIVE_KINDS = {
     "veesix_osvbng", "arrcus_arcos", "checkpoint_cloudguard",
     "nokia_srsim", "generic_vm", "linux",
 }
+
+# These kinds build all required artifacts from their checked-in vrnetlab
+# directory and therefore intentionally have no uploaded source image.
+SELF_BUILDING_KINDS = {"dnlab_frr"}
 
 
 # ── Utilities ────────────────────────────────────────────────────────
@@ -268,11 +273,15 @@ def _docker_tag_for(dir_: Path, qcow2_name: str) -> str | None:
     if res.returncode != 0:
         return None
     version = None
+    declared_image = None
     for line in res.stdout.splitlines():
         line = line.strip()
         if line.startswith("Version:"):
             version = line.split(":", 1)[1].strip()
-            break
+        elif line.startswith("Image:"):
+            declared_image = line.split(":", 1)[1].strip()
+    if declared_image and ":" in declared_image:
+        return declared_image
     if not version or version == qcow2_name:
         # The Makefile exits early if the regex does not match and the
         # "version" equals the filename: the qcow2 does not follow the
@@ -317,6 +326,35 @@ def _same_platform_default_tag(image: str) -> str | None:
     return None
 
 
+def _require_built_image(image: str, *, dry: bool = False) -> None:
+    if dry:
+        return
+    result = subprocess.run(
+        ["docker", "image", "inspect", image],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(
+            f"error: vrnetlab build completed without producing expected image '{image}'. "
+            "Inspect the preceding make output; a pre-build command may have failed."
+        )
+
+
+def _patch_source_tag(kind: str, upstream_tag: str) -> str:
+    """Return the canonical raw tag to feed to the patcher.
+
+    The shared vIOS_V2 Makefile always emits the cisco_vios_v2 repository,
+    including L2 versions. dNLab keeps vIOSL2 in its established distinct
+    repository, so create an alias before patching instead of publishing an
+    incorrectly named final image.
+    """
+    if kind == "cisco_vios" and upstream_tag.startswith("vrnetlab/cisco_vios_v2:L2-"):
+        return upstream_tag.replace("vrnetlab/cisco_vios_v2:", "vrnetlab/cisco_vios_l2_v2:", 1)
+    return upstream_tag
+
+
 # ── Subcommands ──────────────────────────────────────────────────────
 
 def cmd_list_patchable(_args: argparse.Namespace) -> int:
@@ -340,26 +378,62 @@ def cmd_check_patch(args: argparse.Namespace) -> int:
 
 def cmd_build(args: argparse.Namespace) -> int:
     kind: str = args.kind
-    source: str = args.source
+    source: str | None = args.source
     vrnetlab_root = Path(args.vrnetlab_root).expanduser().resolve()
+    plain = bool(getattr(args, "plain", False))
+    patch_requested = (_has_patch(kind) and not plain) or args.with_persistence
+
+    if plain and args.with_persistence:
+        raise SystemExit("error: --plain and --with-persistence are mutually exclusive")
+
+    if patch_requested and not _has_patch(kind):
+        raise SystemExit(
+            f"error: persistence requested but no patch is available for kind "
+            f"'{kind}' (missing {PATCHES_DIR}/{kind}.py).\n"
+            f"        currently patchable kinds: {', '.join(_list_patchable()) or '(none)'}"
+        )
+
+    if kind in SELF_BUILDING_KINDS:
+        if source:
+            raise SystemExit(f"error: self-building kind '{kind}' does not accept a source image")
+        work_dir = _resolve_vrnetlab_dir(kind, vrnetlab_root)
+        upstream_tag = _docker_tag_for(work_dir, "")
+        if not upstream_tag:
+            raise SystemExit(
+                f"error: could not infer the image tag for self-building kind '{kind}'"
+            )
+        print(f"[{kind}] self-building vrnetlab dir: {work_dir}", file=sys.stderr)
+        print(f"[{kind}] expected tag: {upstream_tag}", file=sys.stderr)
+        _run(_make_build_cmd(work_dir), cwd=work_dir, dry=args.dry_run)
+        _require_built_image(upstream_tag, dry=args.dry_run)
+        if not patch_requested:
+            print(f"done: {upstream_tag}")
+            return 0
+        patch_source = _patch_source_tag(kind, upstream_tag)
+        if patch_source != upstream_tag:
+            _run(["docker", "tag", upstream_tag, patch_source], dry=args.dry_run)
+        tag_suffix = "" if patch_source.endswith(PERSIST_SUFFIX) else PERSIST_SUFFIX
+        cmd = [sys.executable, str(APPLY_SCRIPT), kind, patch_source]
+        if tag_suffix != PERSIST_SUFFIX:
+            cmd.append(f"--tag-suffix={tag_suffix}")
+        _run(cmd, dry=args.dry_run)
+        patched_tag = f"{patch_source}{tag_suffix}"
+        if not args.keep_upstream and tag_suffix:
+            _run(["docker", "rmi", upstream_tag], check=False, dry=args.dry_run)
+        print(f"done: {patched_tag}")
+        return 0
 
     if kind in CONTAINER_NATIVE_KINDS:
+        if not source:
+            raise SystemExit(f"error: kind '{kind}' requires a source image reference")
         image = source
         print(f"[{kind}] container-native remote image: {image}", file=sys.stderr)
         _run(["docker", "pull", image], dry=args.dry_run)
-        if not args.with_persistence:
+        if not patch_requested:
             print(f"[{kind}] no vrnetlab build needed; pulled image is ready",
                   file=sys.stderr)
             print(f"done: {image}")
             return 0
-        if not _has_patch(kind):
-            raise SystemExit(
-                f"error: --with-persistence requested but no patch is "
-                f"available for container-native kind '{kind}' "
-                f"(missing {PATCHES_DIR}/{kind}.py).\n"
-                f"        currently patchable kinds: "
-                f"{', '.join(_list_patchable()) or '(none)'}"
-            )
         tag_suffix = "" if image.endswith(PERSIST_SUFFIX) else PERSIST_SUFFIX
         cmd = [sys.executable, str(APPLY_SCRIPT), kind, image]
         if tag_suffix != PERSIST_SUFFIX:
@@ -375,19 +449,14 @@ def cmd_build(args: argparse.Namespace) -> int:
         print(f"done: {patched_tag}")
         return 0
 
+    if not source:
+        raise SystemExit(f"error: kind '{kind}' requires a source image")
     qcow2 = Path(source).expanduser().resolve()
     if not qcow2.is_file():
         raise SystemExit(f"error: qcow2 not found: {qcow2}")
 
     # Patch pre-check: with --with-persistence we want it BEFORE a long
     # vrnetlab build, so we fail fast.
-    if args.with_persistence and not _has_patch(kind):
-        raise SystemExit(
-            f"error: --with-persistence requested but no patch is "
-            f"available for kind '{kind}' (missing {PATCHES_DIR}/{kind}.py).\n"
-            f"        currently patchable kinds: {', '.join(_list_patchable()) or '(none)'}"
-        )
-
     work_dir = _resolve_vrnetlab_dir(kind, vrnetlab_root)
 
     # Fail fast on a wrong file format: the vrnetlab Makefile globs for a
@@ -442,22 +511,26 @@ def cmd_build(args: argparse.Namespace) -> int:
     # If we could not infer the tag before the build, we do not know what
     # `make` produced; require the user to pass it via flag when they want
     # persistence.
-    if args.with_persistence:
+    if patch_requested:
         if not upstream_tag:
             raise SystemExit(
                 "error: could not infer the upstream tag; "
                 "cannot continue with --with-persistence. "
                 "Recheck the kind Makefile."
             )
+        _require_built_image(upstream_tag, dry=args.dry_run)
         # 4. Apply. Some vrnetlab recipes already produce a -dnlab tag; in
         # that case apply.py rebuilds the same tag from the freshly built raw
         # image and the kind-specific patch module still owns all mutations.
-        tag_suffix = "" if upstream_tag.endswith(PERSIST_SUFFIX) else PERSIST_SUFFIX
-        cmd = [sys.executable, str(APPLY_SCRIPT), kind, upstream_tag]
+        patch_source = _patch_source_tag(kind, upstream_tag)
+        if patch_source != upstream_tag:
+            _run(["docker", "tag", upstream_tag, patch_source], dry=args.dry_run)
+        tag_suffix = "" if patch_source.endswith(PERSIST_SUFFIX) else PERSIST_SUFFIX
+        cmd = [sys.executable, str(APPLY_SCRIPT), kind, patch_source]
         if tag_suffix != PERSIST_SUFFIX:
             cmd.append(f"--tag-suffix={tag_suffix}")
         _run(cmd, dry=args.dry_run)
-        patched_tag = f"{upstream_tag}{tag_suffix}"
+        patched_tag = f"{patch_source}{tag_suffix}"
         same_platform_default = (
             _same_platform_default_tag(patched_tag) if not tag_suffix else None
         )
@@ -467,11 +540,13 @@ def cmd_build(args: argparse.Namespace) -> int:
         # 5. Remove the upstream tag (B3), skipped with --keep-upstream.
         if args.keep_upstream or not tag_suffix:
             reason = "--keep-upstream" if args.keep_upstream else "same-tag rebuild"
-            print(f"[{kind}] keeping source tag {upstream_tag} ({reason})",
+            print(f"[{kind}] keeping source tag {patch_source} ({reason})",
                   file=sys.stderr)
         else:
-            _run(["docker", "rmi", upstream_tag],
+            _run(["docker", "rmi", patch_source],
                  check=False, dry=args.dry_run)
+        if patch_source != upstream_tag and not args.keep_upstream:
+            _run(["docker", "rmi", upstream_tag], check=False, dry=args.dry_run)
         print(f"done: {patched_tag}")
     else:
         if upstream_tag:
@@ -503,8 +578,10 @@ def _build_parser() -> argparse.ArgumentParser:
               "ref to pull for container-native kinds"),
     )
     ap.add_argument("--with-persistence", action="store_true",
-                    help=("apply the dnlab patch after a vrnetlab build, or "
-                          "directly to the source image for container-native kinds"))
+                    help=("compatibility alias: require the dnlab patch (patches are "
+                          "already the default for every patchable kind)"))
+    ap.add_argument("--plain", action="store_true",
+                    help="diagnostic build without the dnlab patch")
     ap.add_argument("--keep-upstream", action="store_true",
                     help="do not delete the upstream tag after --with-persistence")
     ap.add_argument("--vrnetlab-root", default=str(DEFAULT_VRNETLAB_ROOT),
@@ -526,8 +603,10 @@ def main(argv: list[str] | None = None) -> int:
         args.kind = args.check_patch
         return cmd_check_patch(args)
 
-    if not args.kind or not args.source:
-        ap.error("need <kind> <source> or --list-patchable / --check-patch KIND")
+    if not args.kind:
+        ap.error("need <kind> [source] or --list-patchable / --check-patch KIND")
+    if not args.source and args.kind not in SELF_BUILDING_KINDS:
+        ap.error(f"kind '{args.kind}' requires <source>")
     return cmd_build(args)
 
 

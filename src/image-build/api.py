@@ -14,6 +14,7 @@ import logging.handlers
 import os
 import re
 import secrets
+import shutil
 import subprocess
 from collections import deque
 from dataclasses import dataclass, field
@@ -41,7 +42,7 @@ UPLOADS_DIR = WORKSPACE / "uploads"
 
 class ImageBuildRequest(BaseModel):
     kind: str = Field(min_length=1, max_length=64)
-    source_path: str = Field(min_length=1, max_length=4096)
+    source_path: str | None = Field(default=None, max_length=4096)
     with_persistence: bool = False
 
 
@@ -54,7 +55,7 @@ class ImageFilenameValidationRequest(BaseModel):
 class Job:
     id: str
     kind: str
-    source_path: str
+    source_path: str | None
     with_persistence: bool
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: datetime | None = None
@@ -112,12 +113,18 @@ async def validate_filename(req: ImageFilenameValidationRequest) -> dict[str, An
     return {"ok": True, "kind": req.kind, "filename": filename}
 
 
-def _validate_image_format(kind: str, source_path: str) -> None:
+def _validate_image_format(kind: str, source_path: str | None) -> None:
     """Reject a source file whose extension does not match the kind's glob.
 
     Only applies to vrnetlab kinds (container-native kinds take a remote
     docker image reference, not a local file).
     """
+    if kind in build_image.SELF_BUILDING_KINDS:
+        if source_path:
+            raise HTTPException(400, f"self-building kind '{kind}' does not accept source_path")
+        return
+    if not source_path:
+        raise HTTPException(400, f"kind '{kind}' requires an uploaded source image")
     if kind in build_image.CONTAINER_NATIVE_KINDS:
         return
     # Source must be a previously uploaded file (no arbitrary server paths).
@@ -326,9 +333,9 @@ async def _run_job(job: Job) -> None:
     job.status = "running"
     job.started_at = datetime.now(timezone.utc)
     _save_job(job)
-    cmd = ["python", str(SCRIPT), job.kind, job.source_path]
-    if job.with_persistence:
-        cmd.append("--with-persistence")
+    cmd = ["python", str(SCRIPT), job.kind]
+    if job.source_path:
+        cmd.append(job.source_path)
     _append_log(job, "$ " + " ".join(cmd))
     proc: asyncio.subprocess.Process | None = None
     try:
@@ -356,6 +363,7 @@ async def _run_job(job: Job) -> None:
     finally:
         job.finished_at = datetime.now(timezone.utc)
         _save_job(job)
+        _cleanup_uploaded_source(job.source_path)
 
 
 def _job_out(job: Job) -> dict[str, Any]:
@@ -377,6 +385,19 @@ def _ensure_store() -> None:
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _cleanup_uploaded_source(source_path: str | None) -> None:
+    """Remove only the per-upload directory owned by this service."""
+    if not source_path:
+        return
+    try:
+        source = Path(source_path).resolve()
+        root = UPLOADS_DIR.resolve()
+        if source.is_relative_to(root) and source.parent.parent == root:
+            shutil.rmtree(source.parent, ignore_errors=True)
+    except OSError:
+        log.warning("Could not clean uploaded source %s", source_path, exc_info=True)
 
 
 def _safe_filename(filename: str) -> str:
@@ -401,6 +422,7 @@ def _kinds_payload() -> dict[str, Any]:
             "vrnetlab_dir": item["vrnetlab_dir"],
             "image_globs": image_globs,
             "image_examples": _image_examples_for(vrnetlab_dir, image_globs),
+            "source_required": kind not in build_image.SELF_BUILDING_KINDS,
         }
     for kind in patchable:
         by_kind.setdefault(kind, {
@@ -410,6 +432,7 @@ def _kinds_payload() -> dict[str, Any]:
             "vrnetlab_dir": None,
             "image_globs": [],
             "image_examples": [],
+            "source_required": kind not in build_image.SELF_BUILDING_KINDS,
         })
     kinds = [by_kind[kind] for kind in sorted(by_kind)]
     return {
@@ -480,7 +503,7 @@ def _job_from_payload(payload: dict[str, Any]) -> Job:
     job = Job(
         id=job_id,
         kind=str(payload["kind"]),
-        source_path=str(payload["source_path"]),
+        source_path=str(payload["source_path"]) if payload.get("source_path") else None,
         with_persistence=bool(payload.get("with_persistence", False)),
         created_at=_parse_dt(payload.get("created_at")) or datetime.now(timezone.utc),
         started_at=_parse_dt(payload.get("started_at")),

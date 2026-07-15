@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "runtime": "warm-links-v1-paused-start",
+  "policy": {
+    "technical_pass_is_not_certification": true,
+    "new_tag_or_digest_defaults_to": "experimental",
+    "development_enablement_requires": "capability=warm-links-v1 and status=validated|experimental",
+    "production_certification_requires": "certification=validated"
+  },
+  "images": [
+    {"cluster": 0, "kind": "dnlab_frr", "image": "vrnetlab/dnlab_frr:10.6.1-dnlab", "digest": "sha256:a66d162ceb5d60f83fd885efe79068d87e19aea91cdc12a9ce5eee9e30348d5c", "technical": "passed", "guest_traffic": "passed", "certification": "validated"},
+    {"cluster": 1, "kind": "openwrt", "image": "vrnetlab/openwrt_openwrt_v2:25.12.2-dnlab", "digest": "sha256:8c2f3aac45ea6c2fd994f9ac409d70710e2d0bbb0c7b7c2266039534b6cdeb3c", "technical": "passed", "certification": "experimental"},
+    {"cluster": 1, "kind": "dnlab_opnsense", "image": "vrnetlab/dnlab_opnsense:26.1.6-dnlab", "digest": "sha256:8513da5ed4aad392d0dc4250d5d30b6df765fc9249de3a8a16c2103ad576deab", "technical": "passed", "certification": "experimental"},
+    {"cluster": 1, "kind": "nvidia_cumulusvx", "image": "vrnetlab/nvidia_cumulusvx:5.16.1-vx-amd64-dnlab", "digest": "sha256:27bff37a3c7f175c811405dda23b30fa00bb21ef714316c79bfa5ec3dc4da6bf", "technical": "passed", "certification": "experimental"},
+    {"cluster": 2, "kind": "mikrotik_ros", "image": "vrnetlab/mikrotik_routeros:7.22.2-dnlab", "digest": "sha256:0905080fadd1b61423ac23ed913ef4857e12af7bd8f6558076a2b2b34c837955", "technical": "passed", "certification": "experimental"},
+    {"cluster": 3, "kind": "cisco_vios", "image": "vrnetlab/cisco_vios_v2:adventerprisek9-m.spa.159-3.m10-dnlab", "digest": "sha256:127ada2330ff00de10e0b5e843be4420de3094317613b1422fee13f6dd352faf", "technical": "passed", "certification": "experimental"},
+    {"cluster": 3, "kind": "cisco_vios", "image": "vrnetlab/cisco_vios_l2_v2:L2-20200929-dnlab", "digest": "sha256:2154b652cc8459a2ca12061dcaaa0331df7b53c2d426cfb7b2c62b5c9ac46b85", "technical": "passed", "certification": "experimental"},
+    {"cluster": 4, "kind": "juniper_vjunosrouter", "image": "vrnetlab/juniper_vjunos-router_v2:25.2R1.9-dnlab", "digest": "sha256:98a9d15f61d234af25ba04e43ebb0b03a195e6013281a383989772c400fdb772", "technical": "passed", "certification": "experimental"},
+    {"cluster": 4, "kind": "juniper_vjunosrouter", "image": "vrnetlab/juniper_vjunos-router_v2:25.4R1.12-dnlab", "digest": "sha256:68a25c033022663a1a289d4e8d60fa8226e9824645aa7c082b3aaa344c9c0965", "technical": "passed", "certification": "experimental"},
+    {"cluster": 4, "kind": "juniper_vjunosswitch", "image": "vrnetlab/juniper_vjunos-switch_v2:25.4R1.12-dnlab", "digest": "sha256:b7c86412a4509a3ed61cdaf168427efdd9a38b4687c0d67b37ce65604125d93b", "technical": "passed", "certification": "experimental"},
+    {"cluster": 4, "kind": "juniper_vjunosevolved", "image": "vrnetlab/juniper_vjunosevolved_v2:25.4R1.13-EVO-dnlab", "digest": "sha256:7010ddb1e00b0e8ed212da5895e31b26170c91877d539dcf5450509d8f1d8976", "technical": "passed", "certification": "experimental"},
+    {"cluster": 5, "kind": "cisco_n9kv", "image": "vrnetlab/cisco_n9kv_v2:9300-10.5.5.M-dnlab", "digest": "sha256:05811b02c51ee3a568a7095a51919042be33a4f812e4f9856a32ac44d135d523", "technical": "passed", "certification": "experimental"},
+    {"cluster": 5, "kind": "cisco_n9kv", "image": "vrnetlab/cisco_n9kv_v2:9500-10.5.5.M-dnlab", "digest": "sha256:594970e00ba18e9ca7d38624f39a46680ec9af5ded7dff16720689f2077e48d7", "technical": "passed", "certification": "experimental"},
+    {"cluster": 6, "kind": "cisco_cat9kv", "image": "vrnetlab/cisco_cat9kv_v2:17.15.03-dnlab", "digest": "sha256:4956eb42e295c8ebc6830058d878a8bedd1057e5b895b8d0dd9f1ecd580b94f4", "technical": "passed", "certification": "experimental"},
+    {"cluster": 6, "kind": "cisco_c9800cl", "image": "vrnetlab/cisco_c9800cl_v2:17.15.05-dnlab", "digest": "sha256:ed4c4264c4f15e1ce9f39c74a8babc225faaa1e62ef68a99391156ffd57a4cc4", "technical": "passed", "certification": "experimental"},
+    {"cluster": 7, "kind": "cisco_xrv9k", "image": "vrnetlab/cisco_xrv9k_v2:25.2.2-dnlab", "digest": "sha256:ee62d26aae30d9014b3256186688178851511ae92a9313090093ee55b380be6e", "technical": "passed", "certification": "experimental"},
+    {"cluster": 8, "kind": "juniper_apstra", "image": "vrnetlab/juniper_apstra:6.1.2-28-dnlab", "digest": "sha256:65c95b7a91fb14b3e635f1a6c555ffd1fd6091d4b330fdf1959bdfa0437b63ce", "technical": "not-applicable", "certification": "unsupported", "reason": "num_nics=0; dedicated adapter required"}
+  ]
+}

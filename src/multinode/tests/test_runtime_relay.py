@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from dnlab_multinode.models.schedule import HostAssignment, SchedulePlan
+from dnlab_multinode.models.state import RuntimeRelayState
 from dnlab_multinode.services import runtime_relay as relay_svc
 from dnlab_multinode.utils.ids import runtime_relay_port
 from dnlab_multinode.utils.naming import (
@@ -125,6 +126,48 @@ def test_deploy_runtime_relay_command_is_lab_scoped_and_host_local():
     assert f"-e RELAY_PORT={runtime_relay_port('demo')}" in run_cmd
     assert "-e RELAY_API_KEY='secret with space'" in run_cmd
     assert f"-e RELAY_ALLOWED_CONTAINERS='{expected_list}'" in run_cmd
+    assert "-e RELAY_ALLOWED_PREFIX=clab-dnlab-demo-" in run_cmd
+
+
+def test_reconcile_runtime_relay_with_prefix_does_not_restart():
+    topo = make_topology(name="demo")
+    plan = _plan_with_assignments("demo", {"master": ["R1", "R2"]})
+    client = _mock_host_client()
+    client.run_no_check.side_effect = lambda cmd, *_, **__: (
+        (0, "lab-prefix-console-port-v1", "")
+        if "runtime-relay.capabilities" in cmd else (0, "true", "")
+    )
+    current = {
+        "master": RuntimeRelayState(
+            host="master", container=runtime_relay_container_name("demo"),
+            bind_ip="10.0.0.10", port=runtime_relay_port("demo"),
+            api_key="secret", allowed=[micro_vd_container_name("demo", "R1")],
+        ),
+    }
+
+    result = relay_svc.reconcile_runtime_relays(
+        topo, plan, {"master": client}, {"master": "10.0.0.10"},
+        "secret", current,
+    )
+
+    assert result["master"]["allowed"] == [
+        micro_vd_container_name("demo", "R1"),
+        micro_vd_container_name("demo", "R2"),
+    ]
+    assert not any(
+        "docker rm -f" in call.args[0] or "docker run -d" in call.args[0]
+        for call in client.run.call_args_list
+    )
+
+
+def test_relay_authorizes_lab_prefix_but_not_another_lab(monkeypatch):
+    monkeypatch.setattr(relay_daemon, "API_KEY", "secret")
+    monkeypatch.setattr(relay_daemon, "ALLOWED", set())
+    monkeypatch.setattr(relay_daemon, "ALLOWED_PREFIX", "clab-dnlab-demo-")
+
+    assert relay_daemon._authorized("secret", "clab-dnlab-demo-R2-R2")
+    assert not relay_daemon._authorized("secret", "clab-dnlab-other-R2-R2")
+    assert not relay_daemon._authorized("secret", "clab-dnlab-demo-arbitrary")
 
 
 def test_deploy_runtime_relay_missing_image_raises():
@@ -163,6 +206,33 @@ def test_connect_cmd_returns_serial_port(monkeypatch):
     assert cmd == [
         "docker", "exec", "-it", "container1", "telnet", "127.0.0.1", "5003",
     ]
+
+
+def test_console_discovery_prefers_launcher_declared_port(monkeypatch):
+    calls = []
+
+    def fake_run(args, **_kwargs):
+        calls.append(args)
+        return MagicMock(returncode=0, stdout="5002\n")
+
+    monkeypatch.setattr(relay_daemon.subprocess, "run", fake_run)
+
+    assert relay_daemon._discover_console_port("container1") == "5002"
+    assert calls == [[
+        "docker", "exec", "container1", "cat", "/run/dnlab-console-port",
+    ]]
+
+
+def test_console_discovery_rejects_invalid_declaration_and_scans(monkeypatch):
+    responses = iter([
+        MagicMock(returncode=0, stdout="22\n"),
+        MagicMock(returncode=0, stdout="5000\n"),
+    ])
+    monkeypatch.setattr(
+        relay_daemon.subprocess, "run", lambda *_args, **_kwargs: next(responses),
+    )
+
+    assert relay_daemon._discover_console_port("container1") == "5000"
 
 
 def test_connect_cmd_shell_fallback_has_no_serial_port(monkeypatch):

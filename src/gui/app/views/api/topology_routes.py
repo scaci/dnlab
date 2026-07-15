@@ -33,6 +33,7 @@ from app.models.link import Link
 from app.models.topology import Topology
 from app.services.lab_resolver import resolve_for_read, resolve_for_write
 from app.services import realnet_bgp
+from app.services.multinode_service import MultinodeServiceError, multinode
 
 log = logging.getLogger(__name__)
 
@@ -261,6 +262,21 @@ async def remove_node(
     user: Annotated[User, Depends(get_current_user)],
 ):
     lab = await resolve_for_write(db, lab_id, user)
+    try:
+        runtime_nodes = await multinode.node_list(lab)
+    except MultinodeServiceError as exc:
+        if "not deployed" not in str(exc).lower():
+            raise HTTPException(
+                409, f"Cannot verify live node state before removal: {exc}",
+            ) from exc
+        runtime_nodes = {}
+    if node_name in runtime_nodes:
+        try:
+            await multinode.node_remove(lab, node_name)
+        except MultinodeServiceError as exc:
+            raise HTTPException(
+                409, f"Cannot remove live node runtime: {exc}",
+            ) from exc
     try:
         topo = _ctrl.remove_node_by_path(lab.yaml_path, lab.netname, node_name)
     except FileNotFoundError as exc:

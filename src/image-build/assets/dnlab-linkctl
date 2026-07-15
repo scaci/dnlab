@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+script=/usr/local/lib/dnlab/dnlab_linkctl.py
+if command -v python3 >/dev/null 2>&1; then
+    exec python3 "$script" "$@"
+fi
+if command -v uv >/dev/null 2>&1; then
+    exec uv run --no-project "$script" "$@"
+fi
+echo "ERROR no Python runtime available for dnlab-linkctl" >&2
+exit 127
