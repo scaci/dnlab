@@ -1,0 +1,16 @@
+id: 20260713-240047a-per-vd-path-quoting
+type: bugfix
+title: Quote per-VD topology paths over SSH
+description: >-
+  Remote per-VD operations now safely quote topology paths, including paths
+  containing characters that the remote shell would otherwise interpret.
+components:
+  - multinode
+audience:
+  - admin
+  - operator
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:240047a256fb6836ad3385c40eb3139473ac4ff1

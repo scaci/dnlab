@@ -13,8 +13,8 @@ Logging release that standardizes runtime infrastructure logs under a single
 
 ### Changed
 
-- Runtime log layout: Persistent service logs now live under /var/log/dnlab
-  with dedicated subdirectories for proxy, gui, auth-db, multinode, image-sync,
+- Runtime log layout: Persistent service logs now live under /var/log/dnlab with
+  dedicated subdirectories for proxy, gui, auth-db, multinode, image-sync,
   lab-cleanup, and image-build.
 - Image-build job logs remain application data: Image-build job logs stay under
   /var/lib/dnlab-image-build/logs because they are job history data used by the
@@ -23,15 +23,14 @@ Logging release that standardizes runtime infrastructure logs under a single
 ### Breaking
 
 - Unified runtime log root: /etc/dnlab/paths.yml now uses log_root:
-  /var/log/dnlab. The previous public keys log_dir_gui and log_dir_multinode
-  are removed, and the Compose environment variables DNLAB_LOG_DIR_GUI and
+  /var/log/dnlab. The previous public keys log_dir_gui and log_dir_multinode are
+  removed, and the Compose environment variables DNLAB_LOG_DIR_GUI and
   DNLAB_LOG_DIR_MULTINODE are replaced by DNLAB_LOG_ROOT.
 
 ### Upgrade Notes
 
 - Create the log root before recreating services: sudo mkdir -p /var/log/dnlab
-- Replace old logging keys in /etc/dnlab/paths.yml with log_root:
-  /var/log/dnlab
+- Replace old logging keys in /etc/dnlab/paths.yml with log_root: /var/log/dnlab
 - Replace DNLAB_LOG_DIR_GUI and DNLAB_LOG_DIR_MULTINODE with DNLAB_LOG_ROOT in
   .env customizations.
 - Recreate runtime services with docker compose -f compose.yml up -d
@@ -45,13 +44,13 @@ Logging release that standardizes runtime infrastructure logs under a single
 - Source checksums: SHA256SUMS (GitHub Release)
 - Proxmox LXC template: dnlab-lxc-proxmox-0.1.2-amd64.tar.zst (GHCR and GitHub
   Release mirror)
-- Proxmox LXC release notes: LXC-RELEASE-NOTES-0.1.2.md (GHCR and GitHub
-  Release mirror)
+- Proxmox LXC release notes: LXC-RELEASE-NOTES-0.1.2.md (GHCR and GitHub Release
+  mirror)
 
 ## 0.1.1 - 2026-07-07
 
-Bugfix release for stale per-lab service cleanup and Docker Compose naming,
-plus runtime helper image prefix consistency.
+Bugfix release for stale per-lab service cleanup and Docker Compose naming, plus
+runtime helper image prefix consistency.
 
 ### Fixed
 
@@ -97,5 +96,5 @@ artifact.
 - Source checksums: SHA256SUMS (GitHub Release)
 - Proxmox LXC template: dnlab-lxc-proxmox-0.1.0-amd64.tar.zst (GHCR and GitHub
   Release mirror)
-- Proxmox LXC release notes: LXC-RELEASE-NOTES-0.1.0.md (GHCR and GitHub
-  Release mirror)
+- Proxmox LXC release notes: LXC-RELEASE-NOTES-0.1.0.md (GHCR and GitHub Release
+  mirror)

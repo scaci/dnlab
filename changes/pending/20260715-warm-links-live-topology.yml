@@ -1,0 +1,20 @@
+id: 20260715-warm-links-live-topology
+type: feature
+title: Add warm links and live topology changes
+description: >-
+  Compatible per-VD images can add or remove dataplane links and nodes while a
+  lab is running, with capability validation, deterministic host networking,
+  persisted runtime state and rollback on partial failure.
+components:
+  - gui
+  - image-build
+  - multinode
+audience:
+  - admin
+  - operator
+  - user
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:c87cd6495c768906a6b191d86586670898c4bf19

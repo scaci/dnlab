@@ -1,0 +1,57 @@
+name: Change metadata
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - plus
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate change records
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install YAML parser
+        run: python -m pip install -r changes/requirements.txt
+
+      - name: Validate records and pull request coverage
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python scripts/changes.py validate --base "$BASE_SHA"
+
+      - name: Publish unreleased changelog preview
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "## Unreleased changelog preview" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          python scripts/changes.py preview >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate records on branch
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        run: python scripts/changes.py validate
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/changes.py validate --tag "$RELEASE_TAG"
+
+      - name: Run change-tool tests
+        run: python -m pip install pytest==8.3.5 && pytest -q tests

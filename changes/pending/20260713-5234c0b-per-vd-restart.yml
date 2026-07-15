@@ -1,0 +1,17 @@
+id: 20260713-5234c0b-per-vd-restart
+type: feature
+title: Restart individual per-VD nodes
+description: >-
+  The GUI and multinode API can restart an individual node in a per-VD lab by
+  performing a controlled stop and start without redeploying the entire lab.
+components:
+  - gui
+  - multinode
+audience:
+  - operator
+  - user
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:5234c0b9d77f0b12434d6b52ed9f58e5bb548931

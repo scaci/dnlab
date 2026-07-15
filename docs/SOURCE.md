@@ -51,6 +51,13 @@ structured release source in `docs/releases/X.Y.Z.yml`. `CHANGELOG.md` remains
 the version-controlled aggregate changelog, while the generated assets are the
 immutable release snapshot attached to the GitHub Release.
 
+During development, each logical modification is recorded in
+`changes/pending/*.yml`. `scripts/changes.py release` validates and archives
+those fragments, creates the versioned release source, regenerates the
+aggregate changelog, and writes the release snapshot assets. Public output only
+contains fragments marked `visibility: public`; internal records remain
+traceable in the versioned archive but are not release notes.
+
 Each public image should also carry a generated third-party notice bundle inside
 the image at `/usr/share/doc/dnlab/third-party/`. The bundle records the image
 SBOM, package metadata and license files for base-image packages, Python

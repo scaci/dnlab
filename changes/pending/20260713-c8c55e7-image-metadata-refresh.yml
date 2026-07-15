@@ -1,0 +1,17 @@
+id: 20260713-c8c55e7-image-metadata-refresh
+type: bugfix
+title: Refresh host and device image metadata
+description: >-
+  Image synchronization now refreshes host inventory and device catalog
+  metadata so newly available or updated images are shown consistently.
+components:
+  - gui
+  - multinode
+audience:
+  - admin
+  - user
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:c8c55e73588236b45a1e369b4ccb61ee01b57d79

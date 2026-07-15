@@ -1,0 +1,17 @@
+id: 20260715-xrv9k-console-selection
+type: bugfix
+title: Select the declared XRv9k console port
+description: >-
+  Console discovery now prefers the launcher-declared interactive serial port
+  and limits fallback selection to the supported console range, avoiding
+  attachment to an unrelated XRv9k serial socket.
+components:
+  - gui
+  - image-build
+audience:
+  - user
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:d292ba98629eee89eb3e0849d6d77227a48b9184

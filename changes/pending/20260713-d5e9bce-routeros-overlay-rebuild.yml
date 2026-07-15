@@ -1,0 +1,16 @@
+id: 20260713-d5e9bce-routeros-overlay-rebuild
+type: bugfix
+title: Preserve RouterOS overlays across rebuilds
+description: >-
+  RouterOS image rebuilds now retain their writable overlay state instead of
+  losing persisted device data during the rebuild workflow.
+components:
+  - image-build
+audience:
+  - admin
+  - user
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:d5e9bcec589c60b7a50fb5a979dfe3bc0b74850e

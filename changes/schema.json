@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dnlab.invalid/schemas/change-fragment.json",
+  "title": "dNLab change fragment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "title",
+    "description",
+    "components",
+    "audience",
+    "visibility",
+    "breaking",
+    "upgrade_notes",
+    "references"
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{5,79}$"},
+    "type": {
+      "enum": [
+        "bugfix",
+        "feature",
+        "new-vd",
+        "change",
+        "deprecation",
+        "removal",
+        "security",
+        "internal",
+        "none"
+      ]
+    },
+    "title": {"type": "string", "minLength": 1},
+    "description": {"type": "string", "minLength": 1},
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,39}$"}
+    },
+    "audience": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["user", "admin", "operator", "developer"]}
+    },
+    "visibility": {"enum": ["public", "internal"]},
+    "breaking": {"type": "boolean"},
+    "upgrade_notes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "references": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "vd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vendor", "platform"],
+      "properties": {
+        "vendor": {"type": "string", "minLength": 1},
+        "platform": {"type": "string", "minLength": 1}
+      }
+    },
+    "reason": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"breaking": {"const": true}}},
+      "then": {"properties": {"upgrade_notes": {"minItems": 1}}}
+    },
+    {
+      "if": {"properties": {"type": {"const": "new-vd"}}},
+      "then": {"required": ["vd"]},
+      "else": {"not": {"required": ["vd"]}}
+    },
+    {
+      "if": {"properties": {"type": {"const": "none"}}},
+      "then": {
+        "required": ["reason"],
+        "properties": {"visibility": {"const": "internal"}, "breaking": {"const": false}}
+      },
+      "else": {"not": {"required": ["reason"]}}
+    },
+    {
+      "if": {"properties": {"type": {"const": "internal"}}},
+      "then": {"properties": {"visibility": {"const": "internal"}}}
+    }
+  ]
+}

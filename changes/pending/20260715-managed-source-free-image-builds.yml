@@ -1,0 +1,17 @@
+id: 20260715-managed-source-free-image-builds
+type: feature
+title: Build managed images without an uploaded source
+description: >-
+  Image-build metadata and the administration UI can start managed source-free
+  builds while retaining upload validation for device images that require a
+  vendor artifact.
+components:
+  - gui
+  - image-build
+audience:
+  - admin
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:d292ba98629eee89eb3e0849d6d77227a48b9184

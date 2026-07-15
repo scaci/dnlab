@@ -1,0 +1,16 @@
+id: 20260713-1c58fed-custom-image-persistence
+type: bugfix
+title: Persist custom dNLab images
+description: >-
+  Per-lab topology generation now preserves configured custom dNLab image
+  references instead of replacing them during multinode generation.
+components:
+  - multinode
+audience:
+  - admin
+  - user
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:1c58fed5a58beee3380598b0e6f6f4fc5a37ce78

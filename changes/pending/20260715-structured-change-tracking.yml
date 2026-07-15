@@ -1,0 +1,14 @@
+id: 20260715-structured-change-tracking
+type: internal
+title: Add structured change tracking
+description: >-
+  Repository changes are recorded as validated YAML fragments and consumed by
+  deterministic changelog and release tooling with CI coverage enforcement.
+components:
+  - release
+audience:
+  - developer
+visibility: internal
+breaking: false
+upgrade_notes: []
+references: []

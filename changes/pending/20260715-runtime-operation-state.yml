@@ -1,0 +1,18 @@
+id: 20260715-runtime-operation-state
+type: change
+title: Expose live runtime operation state
+description: >-
+  The topology UI now reports actionable start and stop capabilities, displays
+  active node operations and partial link failures, and safely removes live
+  runtime nodes before deleting their topology definitions.
+components:
+  - gui
+  - multinode
+audience:
+  - operator
+  - user
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+  - commit:d292ba98629eee89eb3e0849d6d77227a48b9184
