@@ -625,6 +625,11 @@ def _lab_has_running_vd(
     artifacts: list[CleanupArtifact],
     state: DeploymentState | None,
 ) -> bool:
+    # A successful deployment always persists multinode state. Live VD
+    # containers without it are leftovers from an incomplete deploy or destroy;
+    # treating them as authoritative would protect them forever.
+    if state is None:
+        return False
     expected_names = _expected_vd_container_names(lab, state)
     return any(
         artifact.state in _DOCKER_STATES_RUNNING

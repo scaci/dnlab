@@ -136,7 +136,7 @@ def test_parse_artifact_lab_known_patterns():
     assert cleanup.parse_artifact_lab("network", "dnlab-jumphost", known) == ""
 
 
-def test_running_container_protects_entire_lab():
+def test_running_vd_without_state_is_cleaned_after_grace():
     inv = {
         "master": cleanup.HostCleanupInventory(
             name="master",
@@ -149,9 +149,13 @@ def test_running_container_protects_entire_lab():
         )
     }
     plans = cleanup.build_cleanup_plan(inv, {}, grace_seconds=0)
-    assert plans["demo"].protected is True
-    assert "lab-runtime-running" in plans["demo"].reasons
-    assert plans["demo"].actions == []
+    commands = {action.command for action in plans["demo"].actions}
+
+    assert plans["demo"].protected is False
+    assert commands == {
+        "docker rm -f clab-dnlab-demo-R1-R1",
+        "docker network rm mgmt-demo",
+    }
 
 
 def test_running_runtime_relay_without_running_vd_is_cleaned():
@@ -179,7 +183,7 @@ def test_running_runtime_relay_without_running_vd_is_cleaned():
     assert commands == ["docker rm -f dnlab-demo-runtime-relay"]
 
 
-def test_running_vd_protects_lab_with_running_runtime_relay():
+def test_running_vd_without_state_does_not_protect_runtime_relay():
     inv = {
         "worker1": cleanup.HostCleanupInventory(
             name="worker1",
@@ -205,6 +209,47 @@ def test_running_vd_protects_lab_with_running_runtime_relay():
     }
 
     plans = cleanup.build_cleanup_plan(inv, {}, grace_seconds=0)
+    commands = {action.command for action in plans["demo"].actions}
+
+    assert plans["demo"].protected is False
+    assert commands == {
+        "docker rm -f clab-dnlab-demo-R1-R1",
+        "docker rm -f dnlab-demo-runtime-relay",
+    }
+
+
+def test_running_vd_from_state_protects_lab_with_running_runtime_relay(tmp_path):
+    st = _state(tmp_path)
+    inv = {
+        "master": cleanup.HostCleanupInventory(
+            name="master",
+            host="10.0.0.10",
+            reachable=True,
+            artifacts=[
+                cleanup.CleanupArtifact(
+                    "container",
+                    "clab-dnlab-demo-R1-R1",
+                    "master",
+                    "demo",
+                    state="running",
+                ),
+                cleanup.CleanupArtifact(
+                    "container",
+                    "dnlab-demo-runtime-relay",
+                    "master",
+                    "demo",
+                    state="running",
+                ),
+            ],
+        ),
+        "worker1": cleanup.HostCleanupInventory(
+            name="worker1",
+            host="10.0.0.11",
+            reachable=True,
+        ),
+    }
+
+    plans = cleanup.build_cleanup_plan(inv, {"demo": st}, grace_seconds=0)
 
     assert plans["demo"].protected is True
     assert "lab-runtime-running" in plans["demo"].reasons
@@ -371,7 +416,7 @@ def test_running_mgmt_anchor_does_not_protect_stopped_lab():
     assert "docker rm -f clab-dnlab-demo-mgmt-master-mgmt-anchor" in commands
 
 
-def test_running_vd_still_protects_lab_with_running_mgmt_anchor():
+def test_running_vd_without_state_does_not_protect_mgmt_anchor():
     inv = {
         "master": cleanup.HostCleanupInventory(
             name="master",
@@ -391,9 +436,13 @@ def test_running_vd_still_protects_lab_with_running_mgmt_anchor():
     }
 
     plans = cleanup.build_cleanup_plan(inv, {}, grace_seconds=0)
+    commands = {action.command for action in plans["demo"].actions}
 
-    assert plans["demo"].protected is True
-    assert plans["demo"].actions == []
+    assert plans["demo"].protected is False
+    assert commands == {
+        "docker rm -f clab-dnlab-demo-R1-R1",
+        "docker rm -f clab-dnlab-demo-mgmt-master-mgmt-anchor",
+    }
 
 
 def test_state_derived_running_mgmt_anchor_is_cleaned(tmp_path):
