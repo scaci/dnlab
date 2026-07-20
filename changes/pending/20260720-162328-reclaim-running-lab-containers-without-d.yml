@@ -1,0 +1,17 @@
+id: 20260720-162328-reclaim-running-lab-containers-without-d
+type: bugfix
+title: Reclaim running lab containers without deployment state
+description: The lab cleanup reconciler now reclaims running VD and per-lab infrastructure
+  containers when no valid multinode deployment state exists and the grace window
+  has expired, preventing incomplete destroy operations from leaving permanently protected
+  artifacts.
+components:
+- multinode
+audience:
+- admin
+- operator
+visibility: public
+breaking: false
+upgrade_notes: []
+references:
+- commit:eb7974a2c4e71ec528166e40e6ff9c356efc20e3
