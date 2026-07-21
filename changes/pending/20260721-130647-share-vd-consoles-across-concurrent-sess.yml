@@ -1,0 +1,16 @@
+id: 20260721-130647-share-vd-consoles-across-concurrent-sess
+type: feature
+title: Share VD consoles across concurrent sessions
+description: VD consoles can be shared concurrently by GUI and SSH sessions through
+  one runtime connection, and the GUI can open every live VD console in one tabbed
+  window.
+components:
+- gui
+- multinode
+audience:
+- operator
+- user
+visibility: public
+breaking: false
+upgrade_notes: []
+references: []
