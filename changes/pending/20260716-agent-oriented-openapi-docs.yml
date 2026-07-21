@@ -1,0 +1,15 @@
+id: 20260716-agent-oriented-openapi-docs
+type: change
+title: Document GUI API operations for agents
+description: >-
+  The GUI OpenAPI schema now explains each HTTP operation's purpose, relevant
+  constraints, side effects, and result so API agents can select calls safely.
+components:
+  - gui
+audience:
+  - operator
+  - developer
+visibility: public
+breaking: false
+upgrade_notes: []
+references: []

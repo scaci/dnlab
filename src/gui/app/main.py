@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.security import allowed_origins
 from app.services.events_bus import bus
+from app.openapi_docs import install_openapi_docs
 from app.auth.assistant import block_assistant_gui
 from app.views.api.auth_routes import router as auth_router
 from app.views.api.admin_routes import router as admin_router
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     application.include_router(multinode_router)
     application.include_router(user_router)
     application.include_router(webui_router)
+    install_openapi_docs(application)
 
     @application.on_event("startup")
     async def _on_startup() -> None:
