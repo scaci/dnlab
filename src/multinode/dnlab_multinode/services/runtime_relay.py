@@ -25,6 +25,13 @@ log = logging.getLogger(__name__)
 
 _CAPABILITY_LABEL = "io.dnlab.runtime-relay.capabilities"
 _PREFIX_CAPABILITY = "lab-prefix-console-port-v1"
+_MULTISESSION_CAPABILITY = "multisession-console-v1"
+_REQUIRED_CAPABILITIES = {_PREFIX_CAPABILITY, _MULTISESSION_CAPABILITY}
+
+
+def _capabilities(value: str) -> set[str]:
+    return {item.strip() for item in value.split(",") if item.strip()}
+
 
 def generate_api_key() -> str:
     return secrets.token_urlsafe(32)
@@ -146,8 +153,8 @@ def reconcile_runtime_relays(
     """Refresh relay metadata without interrupting existing consoles.
 
     New relays authorize the whole lab's per-VD container namespace, so adding
-    a node only changes persisted inventory.  A relay from an older release is
-    recreated once, and only on a host whose allowlist actually changed.
+    a node only changes persisted inventory. A relay from an older release is
+    recreated once when it lacks a required protocol/runtime capability.
     """
     results: dict[str, dict] = {}
     relay_container = runtime_relay_container_name(topo.name)
@@ -161,32 +168,20 @@ def reconcile_runtime_relays(
                 client.run(f"docker rm -f {relay_container} 2>/dev/null", check=False)
             continue
 
-        previous_allowed = list(getattr(previous, "allowed", []) or [])
-        changed = set(previous_allowed) != set(containers)
         running = False
         if previous:
             rc, out, _ = client.run_no_check(
                 f"docker inspect -f '{{{{.State.Running}}}}' {relay_container}"
             )
             running = rc == 0 and out.strip() == "true"
-        if previous and running and not changed:
-            results[host_name] = {
-                "container": getattr(previous, "container", relay_container),
-                "bind_ip": getattr(previous, "bind_ip", underlay_ips[host_name]),
-                "port": getattr(previous, "port", port),
-                "api_key": getattr(previous, "api_key", api_key),
-                "allowed": containers,
-            }
-            continue
-
         if previous and running:
             rc, capability, _ = client.run_no_check(
                 "docker inspect -f "
                 f"'{{{{index .Config.Labels \"{_CAPABILITY_LABEL}\"}}}}' "
                 f"{relay_container}"
             )
-            supports_prefix = rc == 0 and capability.strip() == _PREFIX_CAPABILITY
-            if supports_prefix:
+            supported = _capabilities(capability) if rc == 0 else set()
+            if _REQUIRED_CAPABILITIES <= supported:
                 results[host_name] = {
                     "container": getattr(previous, "container", relay_container),
                     "bind_ip": getattr(previous, "bind_ip", underlay_ips[host_name]),

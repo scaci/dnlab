@@ -9,19 +9,25 @@
  * API:
  *   ConsolePanel.init(_, _)             — noop, firma compat
  *   ConsolePanel.open(labId, nodeName)  — WindowManager.open('/console.html?…')
+ *   ConsolePanel.openAll(labId)         — aggregated snapshot window
  *   ConsolePanel.close(nodeName)        — noop, the user closes the window
  */
 const ConsolePanel = (() => {
   function init(_tabBarId, _termAreaId) {}
 
   function open(labId, nodeName) {
-    if (!labId || !nodeName) return;
+    if (!labId || !nodeName) return null;
     const url = `/console.html?lab=${encodeURIComponent(labId)}&node=${encodeURIComponent(nodeName)}`;
-    const winName = `dnlab-console-${labId}-${nodeName}`;
-    WindowManager.open(url, winName, { width: 1100, height: 720 });
+    return WindowManager.open(url, '_blank', { width: 1100, height: 720 });
+  }
+
+  function openAll(labId) {
+    if (!labId) return null;
+    const url = `/consoles.html?lab=${encodeURIComponent(labId)}`;
+    return WindowManager.open(url, '_blank', { width: 1280, height: 820 });
   }
 
   function close(_nodeName) {}
 
-  return { init, open, close };
+  return { init, open, openAll, close };
 })();

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All Consoles · dNLab</title>
+  <link rel="icon" type="image/svg+xml" href="/img/brand/09-favicon-64.svg">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <link rel="stylesheet" href="/css/consoles.css">
+</head>
+<body>
+  <header id="consoles-header">
+    <span class="title">▣ Consoles</span>
+    <span id="consoles-lab" class="sub">Loading lab…</span>
+    <span id="consoles-summary" class="summary">loading</span>
+  </header>
+  <nav id="console-tabs" aria-label="VD consoles"></nav>
+  <main id="console-panes">
+    <div id="consoles-message" class="message">Loading live VDs…</div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/console_session.js"></script>
+  <script src="/js/consoles.js"></script>
+</body>
+</html>

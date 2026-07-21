@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import re
+import shlex
 import time
 
 from dnlab_multinode.models.schedule import SchedulePlan
@@ -179,6 +180,8 @@ def create_link(
     clients: dict[str, SSHClient],
     underlay_ips: dict[str, str] | None = None,
     running_nodes: set[str] | None = None,
+    *,
+    defer_warm_carriers: bool = False,
 ) -> RuntimeLinkState:
     """Create one runtime link if both VD endpoints are running."""
     underlay_ips = underlay_ips or {}
@@ -191,11 +194,11 @@ def create_link(
 
     try:
         if link.link_type == "same_host":
-            _create_same_host(link, clients)
+            _create_same_host(link, clients, defer_warm_carriers)
         elif link.link_type == "cross_host":
-            _create_cross_host(link, clients, underlay_ips)
+            _create_cross_host(link, clients, underlay_ips, defer_warm_carriers)
         elif link.link_type == "real_net":
-            _create_realnet(link, clients)
+            _create_realnet(link, clients, defer_warm_carriers)
         else:
             raise ValueError(f"unsupported link_type {link.link_type!r}")
         link.state = "up"
@@ -241,13 +244,18 @@ def reconcile_all_links(
     clients: dict[str, SSHClient],
     underlay_ips: dict[str, str],
     running_nodes: set[str],
+    *,
+    defer_warm_carriers: bool = False,
 ) -> list[RuntimeLinkState]:
     reconciled = []
     for link in links:
         if link.validation_error or link.link_type == "pending":
             reconciled.append(link)
             continue
-        reconciled.append(create_link(link, clients, underlay_ips, running_nodes))
+        reconciled.append(create_link(
+            link, clients, underlay_ips, running_nodes,
+            defer_warm_carriers=defer_warm_carriers,
+        ))
     return reconciled
 
 
@@ -268,7 +276,11 @@ def reconcile_node_links(
     return reconciled
 
 
-def _create_same_host(link: RuntimeLinkState, clients: dict[str, SSHClient]) -> None:
+def _create_same_host(
+    link: RuntimeLinkState,
+    clients: dict[str, SSHClient],
+    defer_warm_carriers: bool,
+) -> None:
     client = clients[link.host_a]
     bridge = _runtime_bridge_name(link)
     client.run(f"ip link show {bridge} >/dev/null 2>&1 || ip link add {bridge} type bridge")
@@ -278,7 +290,9 @@ def _create_same_host(link: RuntimeLinkState, clients: dict[str, SSHClient]) -> 
         for iface in [link.host_endpoint_a, link.host_endpoint_b]:
             client.run(f"ip link set {iface} up")
             client.run(f"ip link set {iface} master {bridge}")
-        _set_link_carriers(link, clients, "up", check=True)
+        _set_link_carriers(
+            link, clients, "up", check=True, defer=defer_warm_carriers,
+        )
     except Exception:
         _set_link_carriers(link, clients, "down", check=False)
         _remove_bridge_forwarding(client, bridge)
@@ -299,6 +313,7 @@ def _create_cross_host(
     link: RuntimeLinkState,
     clients: dict[str, SSHClient],
     underlay_ips: dict[str, str],
+    defer_warm_carriers: bool,
 ) -> None:
     src = clients[link.host_a]
     dst = clients[link.host_b]
@@ -313,7 +328,9 @@ def _create_cross_host(
             f"containerlab tools vxlan create --remote {underlay_ips[link.host_a]} "
             f"--id {link.vxlan_id} --link {link.host_endpoint_b}"
         )
-        _set_link_carriers(link, clients, "up", check=True)
+        _set_link_carriers(
+            link, clients, "up", check=True, defer=defer_warm_carriers,
+        )
     except Exception:
         _set_link_carriers(link, clients, "down", check=False)
         _delete_cross_host_network(link, clients)
@@ -335,12 +352,18 @@ def _delete_cross_host_network(link: RuntimeLinkState, clients: dict[str, SSHCli
             client.run(f"ip link delete {_vxlan_altname(iface)} 2>/dev/null", check=False)
 
 
-def _create_realnet(link: RuntimeLinkState, clients: dict[str, SSHClient]) -> None:
+def _create_realnet(
+    link: RuntimeLinkState,
+    clients: dict[str, SSHClient],
+    defer_warm_carriers: bool,
+) -> None:
     client = clients[link.host_a]
     client.run(f"ip link set {link.host_endpoint_a} up")
     try:
         client.run(f"ip link set {link.host_endpoint_a} master {link.host_endpoint_b}")
-        _set_link_carriers(link, clients, "up", check=True)
+        _set_link_carriers(
+            link, clients, "up", check=True, defer=defer_warm_carriers,
+        )
     except Exception:
         _set_link_carriers(link, clients, "down", check=False)
         client.run(f"ip link set {link.host_endpoint_a} nomaster 2>/dev/null", check=False)
@@ -398,6 +421,7 @@ def _set_link_carriers(
     state: str,
     *,
     check: bool,
+    defer: bool = False,
 ) -> None:
     targets = (
         (link.warm_a, link.host_a, link.container_a, link.endpoint_a.get("iface", "")),
@@ -414,6 +438,17 @@ def _set_link_carriers(
                 raise RuntimeError(f"host client unavailable for warm-link target {host}")
             continue
         command = f"docker exec {container} dnlab-linkctl {iface} {state}"
+        if defer and state == "up":
+            deferred = (
+                "while [ ! -S /run/dnlab-link-control.sock ]; do "
+                "sleep 0.25; done; "
+                f"exec dnlab-linkctl {iface} up"
+            )
+            client.run(
+                f"docker exec -d {container} sh -c {shlex.quote(deferred)}",
+                check=check,
+            )
+            continue
         if not check or state != "up":
             client.run(command, check=check)
             continue

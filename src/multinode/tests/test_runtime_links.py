@@ -255,6 +255,29 @@ def test_warm_carrier_waits_for_link_controller_socket(monkeypatch):
     assert link.state == "up"
 
 
+def test_initial_reconcile_can_defer_warm_carrier_until_guest_is_ready():
+    client = FakeClient()
+    link = RuntimeLinkState(
+        id="l0", link_type="same_host",
+        endpoint_a={"node": "R1", "iface": "eth1"},
+        endpoint_b={"node": "R2", "iface": "eth1"},
+        host_a="master", host_b="master",
+        host_endpoint_a="wp-left", host_endpoint_b="wp-right",
+        container_a="clab-lab-R1", warm_a=True,
+    )
+
+    runtime_links.reconcile_all_links(
+        [link], {"master": client}, {}, {"R1", "R2"},
+        defer_warm_carriers=True,
+    )
+
+    commands = [cmd for cmd, _ in client.commands]
+    deferred = next(cmd for cmd in commands if "dnlab-linkctl eth1 up" in cmd)
+    assert deferred.startswith("docker exec -d clab-lab-R1 sh -c ")
+    assert "while [ ! -S /run/dnlab-link-control.sock ]" in deferred
+    assert link.state == "up"
+
+
 def test_cross_host_partial_attach_rolls_back_both_carriers_and_vxlans():
     class FailingPeer(FakeClient):
         def run(self, cmd, check=True):

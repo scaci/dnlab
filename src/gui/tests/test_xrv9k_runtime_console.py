@@ -25,3 +25,12 @@ def test_xrv9k_catalog_exposes_full_default_warm_profile():
         "vendor_fmt": "GigabitEthernet0/0/0/{i}",
         "count": 16,
     }
+
+
+def test_console_open_uses_a_fresh_browser_window():
+    console_js = (
+        Path(__file__).parents[1] / "app/views/static/js/console.js"
+    ).read_text(encoding="utf-8")
+
+    assert "WindowManager.open(url, '_blank'" in console_js
+    assert "dnlab-console-${labId}-${nodeName}" not in console_js

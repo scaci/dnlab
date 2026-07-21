@@ -673,6 +673,7 @@ class DeployController:
         }
         self._state.runtime_links = runtime_links_svc.reconcile_all_links(
             links, self._clients, self._underlay_ips, running_nodes,
+            defer_warm_carriers=True,
         )
         self._state.vxlan_dataplane = [
             VxlanLinkState(

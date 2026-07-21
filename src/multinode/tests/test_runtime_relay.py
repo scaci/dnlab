@@ -1,6 +1,8 @@
 """Tests for the per-host runtime relay service."""
 
 import os
+import queue
+import threading
 import time
 from unittest.mock import MagicMock
 
@@ -44,6 +46,32 @@ class FakeRelaySocket:
                 os.close(fd)
             except OSError:
                 pass
+
+
+class FakeConsoleSocket:
+    def __init__(self):
+        self.sent: list[bytes] = []
+        self.incoming: queue.Queue[bytes | None] = queue.Queue()
+        self.closed = False
+
+    def sendall(self, data: bytes):
+        if self.closed:
+            raise OSError("closed")
+        self.sent.append(data)
+
+    def recv(self, _size: int):
+        data = self.incoming.get()
+        return b"" if data is None else data
+
+    def client_send(self, data: bytes):
+        self.incoming.put(data)
+
+    def client_close(self):
+        self.incoming.put(None)
+
+    def shutdown(self, _how):
+        self.closed = True
+        self.incoming.put(None)
 
 
 def _mock_host_client(image_exists: bool = True, runs_ok: bool = True) -> MagicMock:
@@ -134,7 +162,7 @@ def test_reconcile_runtime_relay_with_prefix_does_not_restart():
     plan = _plan_with_assignments("demo", {"master": ["R1", "R2"]})
     client = _mock_host_client()
     client.run_no_check.side_effect = lambda cmd, *_, **__: (
-        (0, "lab-prefix-console-port-v1", "")
+        (0, "lab-prefix-console-port-v1,multisession-console-v1", "")
         if "runtime-relay.capabilities" in cmd else (0, "true", "")
     )
     current = {
@@ -158,6 +186,39 @@ def test_reconcile_runtime_relay_with_prefix_does_not_restart():
         "docker rm -f" in call.args[0] or "docker run -d" in call.args[0]
         for call in client.run.call_args_list
     )
+
+
+def test_reconcile_restarts_relay_without_multisession_capability():
+    topo = make_topology(name="demo")
+    plan = _plan_with_assignments("demo", {"master": ["R1"]})
+    client = _mock_host_client()
+
+    def run_no_check(cmd, *_, **__):
+        if "runtime-relay.capabilities" in cmd:
+            return 0, "lab-prefix-console-port-v1", ""
+        if "docker image inspect" in cmd:
+            return 0, "", ""
+        if "docker inspect" in cmd and "State.Running" in cmd:
+            return 0, "true", ""
+        return 0, "", ""
+
+    client.run_no_check.side_effect = run_no_check
+    current = {
+        "master": RuntimeRelayState(
+            host="master", container=runtime_relay_container_name("demo"),
+            bind_ip="10.0.0.10", port=runtime_relay_port("demo"),
+            api_key="secret", allowed=[micro_vd_container_name("demo", "R1")],
+        ),
+    }
+
+    relay_svc.reconcile_runtime_relays(
+        topo, plan, {"master": client}, {"master": "10.0.0.10"},
+        "secret", current,
+    )
+
+    commands = [call.args[0] for call in client.run.call_args_list]
+    assert any("docker rm -f" in command for command in commands)
+    assert any("docker run -d" in command for command in commands)
 
 
 def test_relay_authorizes_lab_prefix_but_not_another_lab(monkeypatch):
@@ -237,12 +298,32 @@ def test_console_discovery_rejects_invalid_declaration_and_scans(monkeypatch):
 
 def test_connect_cmd_shell_fallback_has_no_serial_port(monkeypatch):
     monkeypatch.setattr(relay_daemon, "_discover_console_port", lambda _container: "")
+    monkeypatch.setattr(relay_daemon, "_serial_console_expected", lambda _container: False)
 
     cmd, port = relay_daemon._connect_cmd("container1")
 
     assert port is None
     assert cmd[:4] == ["docker", "exec", "-it", "container1"]
     assert "vtysh" in cmd[-1]
+
+
+def test_connect_cmd_waits_for_expected_serial_console(monkeypatch):
+    monkeypatch.setattr(relay_daemon, "_discover_console_port", lambda _container: "")
+    monkeypatch.setattr(relay_daemon, "_serial_console_expected", lambda _container: True)
+
+    assert relay_daemon._connect_cmd("container1") is None
+
+
+@pytest.mark.parametrize("returncode, expected", [(0, True), (1, False), (125, None)])
+def test_serial_console_expectation_handles_vm_native_and_transient_failure(
+    monkeypatch, returncode, expected,
+):
+    monkeypatch.setattr(
+        relay_daemon.subprocess, "run",
+        lambda *_args, **_kwargs: MagicMock(returncode=returncode),
+    )
+
+    assert relay_daemon._serial_console_expected("container1") is expected
 
 
 def test_relay_pty_disconnect_cleans_container_telnet(monkeypatch):
@@ -336,6 +417,257 @@ def test_container_telnet_cleanup_errors_are_best_effort(monkeypatch):
     monkeypatch.setattr(relay_daemon.subprocess, "run", fake_run)
 
     relay_daemon._cleanup_container_telnet("container1", "5000")
+
+
+def test_console_broker_fanout_input_replay_and_grace(monkeypatch):
+    popen_calls = []
+    writes = []
+
+    class FakeProc:
+        pid = os.getpid()
+
+        def __init__(self, args, **_kwargs):
+            popen_calls.append(args)
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+    monkeypatch.setattr(relay_daemon, "_connect_cmd", lambda _container: (["fake"], "5000"))
+    monkeypatch.setattr(relay_daemon.subprocess, "Popen", FakeProc)
+    monkeypatch.setattr(relay_daemon, "_cleanup_container_telnet", lambda *_: None)
+    monkeypatch.setattr(relay_daemon, "CONSOLE_GRACE_SECONDS", 0.15)
+    def no_upstream_data(*_args, **_kwargs):
+        time.sleep(0.005)
+        return [], [], []
+
+    monkeypatch.setattr(relay_daemon.select, "select", no_upstream_data)
+    real_write = relay_daemon.os.write
+
+    def record_write(fd, data):
+        writes.append(bytes(data))
+        return len(data)
+
+    relay_daemon._close_console_brokers()
+    client1 = FakeConsoleSocket()
+    client2 = FakeConsoleSocket()
+    threads = [
+        threading.Thread(
+            target=relay_daemon._get_console_broker("container1").attach,
+            args=(client1,), daemon=True,
+        ),
+        threading.Thread(
+            target=relay_daemon._get_console_broker("container1").attach,
+            args=(client2,), daemon=True,
+        ),
+    ]
+    for thread in threads:
+        thread.start()
+    broker = relay_daemon._get_console_broker("container1")
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and (
+        len(broker._subscribers) != 2 or len(popen_calls) != 1
+    ):
+        time.sleep(0.005)
+    assert len(broker._subscribers) == 2
+    assert len(popen_calls) == 1
+
+    broker._fan_out(b"ready\n")
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and (not client1.sent or not client2.sent):
+        time.sleep(0.005)
+    assert client1.sent == [b"ready\n"]
+    assert client2.sent == [b"ready\n"]
+
+    monkeypatch.setattr(relay_daemon.os, "write", record_write)
+    client1.client_send(b"one\n")
+    client2.client_send(b"two\n")
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and len(writes) < 2:
+        time.sleep(0.005)
+    assert sorted(writes[:2]) == [b"one\n", b"two\n"]
+    monkeypatch.setattr(relay_daemon.os, "write", real_write)
+
+    client1.client_close()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and len(broker._subscribers) != 1:
+        time.sleep(0.005)
+    broker._fan_out(b"still-live\n")
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and len(client2.sent) != 2:
+        time.sleep(0.005)
+    assert client2.sent[-1] == b"still-live\n"
+
+    client2.client_close()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and broker._subscribers:
+        time.sleep(0.005)
+    assert not broker._subscribers
+
+    client3 = FakeConsoleSocket()
+    thread3 = threading.Thread(target=broker.attach, args=(client3,), daemon=True)
+    thread3.start()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and not client3.sent:
+        time.sleep(0.005)
+    assert client3.sent == [b"ready\nstill-live\n"]
+    time.sleep(0.2)
+    assert not broker.closed
+
+    client3.client_close()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and not broker.closed:
+        time.sleep(0.005)
+    assert broker.closed
+    for thread in [*threads, thread3]:
+        thread.join(timeout=1)
+
+
+def test_console_broker_history_is_bounded_and_sessions_are_per_container(monkeypatch):
+    popen_calls = []
+
+    class FakeProc:
+        pid = os.getpid()
+
+        def __init__(self, args, **_kwargs):
+            popen_calls.append(args)
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+    monkeypatch.setattr(
+        relay_daemon, "_connect_cmd", lambda container: (["fake", container], "5000"),
+    )
+    monkeypatch.setattr(relay_daemon.subprocess, "Popen", FakeProc)
+    monkeypatch.setattr(relay_daemon, "_cleanup_container_telnet", lambda *_: None)
+    def no_upstream_data(*_args, **_kwargs):
+        time.sleep(0.005)
+        return [], [], []
+
+    monkeypatch.setattr(relay_daemon.select, "select", no_upstream_data)
+    relay_daemon._close_console_brokers()
+    first = relay_daemon._get_console_broker("container1")
+    second = relay_daemon._get_console_broker("container2")
+
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and len(popen_calls) != 2:
+        time.sleep(0.005)
+
+    first._fan_out(b"x" * (relay_daemon.CONSOLE_HISTORY_BYTES + 17))
+
+    assert len(first._history) == relay_daemon.CONSOLE_HISTORY_BYTES
+    assert first is relay_daemon._get_console_broker("container1")
+    assert first is not second
+    assert len(popen_calls) == 2
+    first.close()
+    replacement = relay_daemon._get_console_broker("container1")
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and len(popen_calls) != 3:
+        time.sleep(0.005)
+    assert replacement is not first
+    assert len(popen_calls) == 3
+    relay_daemon._close_console_brokers()
+
+
+def test_console_clients_wait_together_for_one_serial_upstream(monkeypatch):
+    ready = threading.Event()
+    popen_calls = []
+    writes = []
+
+    class FakeProc:
+        pid = os.getpid()
+
+        def __init__(self, args, **_kwargs):
+            popen_calls.append(args)
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+    def connect_when_ready(_container):
+        return (["fake"], "5000") if ready.is_set() else None
+
+    def no_upstream_data(*_args, **_kwargs):
+        time.sleep(0.005)
+        return [], [], []
+
+    monkeypatch.setattr(relay_daemon, "_connect_cmd", connect_when_ready)
+    monkeypatch.setattr(relay_daemon, "_container_running", lambda _container: True)
+    monkeypatch.setattr(relay_daemon, "CONSOLE_READY_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(relay_daemon.subprocess, "Popen", FakeProc)
+    monkeypatch.setattr(relay_daemon.select, "select", no_upstream_data)
+    monkeypatch.setattr(relay_daemon, "_cleanup_container_telnet", lambda *_: None)
+    monkeypatch.setattr(
+        relay_daemon.os, "write",
+        lambda _fd, data: writes.append(bytes(data)) or len(data),
+    )
+    relay_daemon._close_console_brokers()
+
+    clients = [FakeConsoleSocket(), FakeConsoleSocket()]
+    broker = relay_daemon._get_console_broker("waiting-container")
+    threads = [
+        threading.Thread(target=broker.attach, args=(client,), daemon=True)
+        for client in clients
+    ]
+    for thread in threads:
+        thread.start()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and len(broker._subscribers) != 2:
+        time.sleep(0.005)
+
+    assert len(broker._subscribers) == 2
+    assert popen_calls == []
+    clients[0].client_send(b"typed-while-waiting\n")
+    time.sleep(0.02)
+    assert writes == []
+
+    ready.set()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and len(popen_calls) != 1:
+        time.sleep(0.005)
+    assert popen_calls == [["fake"]]
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and not writes:
+        time.sleep(0.005)
+    assert writes == [b"typed-while-waiting\n"]
+
+    broker._fan_out(b"console-ready\n")
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline and any(not client.sent for client in clients):
+        time.sleep(0.005)
+    assert [client.sent for client in clients] == [
+        [b"console-ready\n"], [b"console-ready\n"],
+    ]
+
+    for client in clients:
+        client.client_close()
+    for thread in threads:
+        thread.join(timeout=1)
+    broker.close()
+
+
+def test_console_subscriber_rejects_slow_client_queue(monkeypatch):
+    client = FakeConsoleSocket()
+    subscriber = relay_daemon._ConsoleSubscriber(client)
+    monkeypatch.setattr(relay_daemon, "CONSOLE_CLIENT_QUEUE_BYTES", 4)
+    try:
+        assert subscriber.enqueue(b"1234")
+        assert not subscriber.enqueue(b"5")
+    finally:
+        subscriber.close()
 
 
 def test_stream_logs_flushes_small_chunks_immediately(monkeypatch):

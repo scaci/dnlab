@@ -49,6 +49,34 @@ def _controller_for(topo):
     return ctrl
 
 
+def test_initial_deploy_defers_warm_carriers(monkeypatch, topo_factory):
+    topo = topo_factory(nodes={}, links=[], num_workers=0)
+    ctrl = _controller_for(topo)
+    ctrl._clients = {}
+    marker = object()
+    observed = {}
+
+    monkeypatch.setattr(
+        "dnlab_multinode.controllers.deploy.runtime_links_svc.build_runtime_links",
+        lambda *_args: [marker],
+    )
+
+    def reconcile(*_args, **kwargs):
+        observed.update(kwargs)
+        return []
+
+    monkeypatch.setattr(
+        "dnlab_multinode.controllers.deploy.runtime_links_svc.reconcile_all_links",
+        reconcile,
+    )
+
+    ctrl._deploy_runtime_links(
+        topo, SchedulePlan(lab_name=topo.name, assignments={}),
+    )
+
+    assert observed["defer_warm_carriers"] is True
+
+
 def test_pervd_deploy_is_sequential_within_each_host(topo_factory):
     topo = topo_factory(
         nodes={

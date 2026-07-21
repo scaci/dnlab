@@ -17,6 +17,7 @@ const Toolbar = (() => {
     _bind('btn-export-drawio',() => _emit('export-drawio'));
     _bind('btn-deploy',       () => _emit('deploy'));
     _bind('btn-destroy',      () => _emit('destroy'));
+    _bind('btn-all-consoles', () => _emit('all-consoles'));
     _bind('btn-delete-topo',  () => _emit('delete-topo'));
     _bind('btn-fit',          () => _emit('fit'));
     _bind('btn-follow-rabbit',() => _emit('follow-rabbit'));
@@ -88,6 +89,11 @@ const Toolbar = (() => {
     badge.title = tooltip || '';
   }
 
+  function setAllConsolesEnabled(enabled) {
+    const button = document.getElementById('btn-all-consoles');
+    if (button) button.disabled = !enabled;
+  }
+
   // ── Internals ────────────────────────────────────────────────────────
   function _bind(id, handler) {
     const el = document.getElementById(id);
@@ -153,5 +159,13 @@ const Toolbar = (() => {
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  return { init, setCurrentTopo, setLabStatus, toggleMgmtVisible, isMgmtVisible, on };
+  return {
+    init,
+    setCurrentTopo,
+    setLabStatus,
+    setAllConsolesEnabled,
+    toggleMgmtVisible,
+    isMgmtVisible,
+    on,
+  };
 })();

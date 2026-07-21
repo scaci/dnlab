@@ -99,8 +99,10 @@
     }
     if (isDeploy && !isTerminal) {
       Toolbar.setLabStatus('deploying', `${phase} (${status})${evt.detail ? ' — ' + evt.detail : ''}`);
+      Toolbar.setAllConsolesEnabled(false);
     } else if (isDestroy && !isTerminal) {
       Toolbar.setLabStatus('destroying', `${phase} (${status})${evt.detail ? ' — ' + evt.detail : ''}`);
+      Toolbar.setAllConsolesEnabled(false);
     }
   });
 
@@ -472,8 +474,24 @@
     });
   });
 
+  // ── Aggregated VD consoles ───────────────────────────────────────────
+  Toolbar.on('all-consoles', () => {
+    const labId = currentLabId;
+    if (!labId) { showToast('No topology open', 'warn'); return; }
+    if (!_labHasLiveConsoles(lastLab)) {
+      Toolbar.setAllConsolesEnabled(false);
+      showToast('Runtime status is stale or contains no live VD consoles', 'warn');
+      return;
+    }
+    // Keep window.open in the direct click call stack so browser popup
+    // protection recognises the explicit user gesture.
+    const popup = ConsolePanel.openAll(labId);
+    if (!popup) showToast('Popup blocked: allow popups to open all consoles', 'warn');
+  });
+
   async function _executeDeploy() {
     Toolbar.setLabStatus('deploying', 'starting deploy...');
+    Toolbar.setAllConsolesEnabled(false);
     showToast('Deployment in progress…', 'info');
     try {
       const res = await API.Labs.deploy(currentLabId);
@@ -1143,6 +1161,7 @@
     };
     Toolbar.setCurrentTopo(null);
     Toolbar.setLabStatus('stopped');
+    Toolbar.setAllConsolesEnabled(false);
     Canvas.loadTopology({ name: '', nodes: [], links: [], extra: {} });
     Canvas.clearMgmt();
     MgmtPanel.clear();
@@ -1197,10 +1216,12 @@
       lastLab = lab || null;
       labStatus = lab.status || (lab.containers?.length ? 'running' : 'stopped');
       Toolbar.setLabStatus(labStatus);
+      _updateAllConsolesAvailability();
       Canvas.setMgmtRuntime(_runtimeMgmtFromContainers(lab?.containers || []));
     } catch (_) {
       lastLab = null;
       Toolbar.setLabStatus('unknown');
+      Toolbar.setAllConsolesEnabled(false);
       Canvas.setMgmtRuntime({});
     }
     try {
@@ -1250,6 +1271,16 @@
       lastLiveStatus = null;
       JumphostBox.clear();
     }
+  }
+
+  function _labHasLiveConsoles(lab) {
+    return (lab?.status === 'running' || lab?.status === 'partial')
+      && (lab?.containers || []).some(container =>
+        container.state === 'running' && !!container.node_name);
+  }
+
+  function _updateAllConsolesAvailability() {
+    Toolbar.setAllConsolesEnabled(_labHasLiveConsoles(lastLab));
   }
 
   function _runtimeMgmtFromContainers(containers) {
